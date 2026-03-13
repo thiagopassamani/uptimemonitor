@@ -3,16 +3,13 @@
 // Define a versão atual do plugin
 define('PLUGIN_UPTIMEMONITOR_VERSION', '1.0.0');
 define('PLUGIN_UPTIMEMONITOR_DIR', __DIR__);
-define('PLUGIN_UPTIMEMONITOR_NAME', 'Uptime Monitor')
+define('PLUGIN_UPTIMEMONITOR_NAME', 'Uptime Monitor');
 
-/**
- * Função principal de inicialização do plugin
- */
+// Função principal de inicialização do plugin
 function plugin_init_uptimemonitor() {
    global $PLUGIN_HOOKS;
 
-   // 1. Segurança e Compatibilidade
-   $PLUGIN_HOOKS['csrf_compliant']['uptimemonitor'] = true;
+   $PLUGIN_HOOKS['csrf_compliant']['uptimemonitor'] = true; // Segurança CSRF
 
    // 2. Registro de Classes (Sem repetições)
    Plugin::registerClass('PluginUptimemonitorMonitor', [
@@ -23,7 +20,7 @@ function plugin_init_uptimemonitor() {
        'addtabon' => ['Profile']
    ]);
 
-   // 3. Gestão de Direitos
+   // Gestão de Direitos
    $PLUGIN_HOOKS['rights']['uptimemonitor'] = 'Uptime Monitor';
 
    // 4. Menus (Aparecerá em Plugins > Uptime Monitor)
