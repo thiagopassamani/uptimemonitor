@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <name>Uptime Monitor</name>
+    <key>uptimemonitor</key>
+    <state>stable</state>
+    <logo>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/uptimemonitor.png</logo>
+    <description>
+        <short>
+            <pt><![CDATA[Este plugin permite adicionar 4 novas opções a um ticket no GLPI]]></pt>
+        </short>
+        <long>
+            <pt><![CDATA[Este plugin permite adicionar 4 novas opções a um ticket no GLPI<br />- Ao criar um ticket, ao selecionar o status "Resolvido" ou "Fechado", o ticket irá propor preencher a solução do ticket,<br />- Ao criar e modificar um ticket, ao selecionar o status "Aguardando", você poderá definir tipos de espera, a razão da espera e uma data de reprogramação,<br />- Uma nova área estará disponível para adicionar informações após o fechamento do ticket, <br />- Ao criar e modificar um ticket, ao selecionar a urgência com base na configuração do plugin, você poderá definir uma justificativa.]]></pt>
+    </long>
+    </description>
+    <homepage>https://github.com/thiagopassamani/uptimemonitor</homepage>
+    <download>https://github.com/thiagopassamani/uptimemonitor/releases</download>
+    <issues>https://github.com/thiagopassamani/uptimemonitor/issues</issues>
+    <readme>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/README.md</readme>
+    <authors>
+        <author>Thiago Passamani</author>
+    </authors>
+    <versions>
+        <version>
+            <num>1.0.0</num>
+            <compatibility>10.0</compatibility>
+        </version>
+    </versions>
+    <langs>
+        <lang>pt_BR</lang>>
+    </langs>
+    <license><![CDATA[GPL v2+]]></license>
+    <tags>
+        <fr>
+            <tag>Ticket</tag>
+            <tag>Solution</tag>
+            <tag>Attente</tag>
+        </fr>
+        <en>
+            <tag>Ticket</tag>
+            <tag>Solution</tag>
+            <tag>Waiting</tag>
+        </en>
+    </tags>
+    <screenshots>
+      <screenshot>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/screenshots/config.PNG</screenshot>
+      <screenshot>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/screenshots/miseenattente.PNG</screenshot>
+      <screenshot>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/screenshots/resolu.PNG</screenshot>
+      <screenshot>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/screenshots/urgence.PNG</screenshot>
+   </screenshots>
+</root>

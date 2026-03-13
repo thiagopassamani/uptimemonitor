@@ -1,0 +1,85 @@
+<?php
+
+// Define a versão atual do plugin
+define('PLUGIN_UPTIMEMONITOR_VERSION', '1.0.0');
+define('PLUGIN_UPTIMEMONITOR_DIR', __DIR__);
+define('PLUGIN_UPTIMEMONITOR_NAME', 'Uptime Monitor')
+
+/**
+ * Função principal de inicialização do plugin
+ */
+function plugin_init_uptimemonitor() {
+   global $PLUGIN_HOOKS;
+
+   // 1. Segurança e Compatibilidade
+   $PLUGIN_HOOKS['csrf_compliant']['uptimemonitor'] = true;
+
+   // 2. Registro de Classes (Sem repetições)
+   Plugin::registerClass('PluginUptimemonitorMonitor', [
+      'addtabon' => ['PluginUptimemonitorMonitor']
+   ]);
+   Plugin::registerClass('PluginUptimemonitorLog');
+   Plugin::registerClass('PluginUptimemonitorProfile', [
+       'addtabon' => ['Profile']
+   ]);
+
+   // 3. Gestão de Direitos
+   $PLUGIN_HOOKS['rights']['uptimemonitor'] = 'Uptime Monitor';
+
+   // 4. Menus (Aparecerá em Plugins > Uptime Monitor)
+   // Alterado para 'ticket' para que o pessoal do NOC consiga ver o menu e breadcrumb
+   if (Session::haveRight('ticket', READ)) {
+      $PLUGIN_HOOKS['menu_toadd']['uptimemonitor'] = [
+         'plugins' => 'PluginUptimemonitorMonitor'
+      ];
+   }
+
+   // 5. Notificações (Padrão GLPI 10)
+   $PLUGIN_HOOKS['item_get_events']['uptimemonitor'] = [
+      'PluginUptimemonitorMonitor' => 'getEvents'
+   ];
+   $PLUGIN_HOOKS['item_get_targets']['uptimemonitor'] = [
+      'PluginUptimemonitorMonitor' => 'getTargets'
+   ];
+
+   // 6. Ações Automáticas (Cron)
+   // Aponta para a classe onde criámos as funções cronInfo e cronCheck
+   $PLUGIN_HOOKS['cron']['uptimemonitor'] = ['PluginUptimemonitorMonitor'];
+}
+
+/**
+ * Informações estruturais do plugin
+ */
+function plugin_version_uptimemonitor() {
+   return [
+      'name'           => PLUGIN_UPTIMEMONITOR_NAME,
+      'version'        => PLUGIN_UPTIMEMONITOR_VERSION,
+      'author'         => 'Thiago Passamani <thiagopassamani@gmail.com>',
+      'license'        => 'GPLv2+',
+      'homepage'       => 'https://github.com/thiagopassamani/uptimemonitor',
+      'requirements'   => [
+         'glpi' => [
+            'min' => '10.0.0'
+         ]
+      ]
+   ];
+}
+
+/**
+ * Pré-requisitos
+ */
+function plugin_uptimemonitor_check_prerequisites() {
+   if (version_compare(GLPI_VERSION, '10.0.0', 'lt')) {
+      echo "Este plugin requer o GLPI versão 10.0.0 ou superior.";
+      return false;
+   }
+   if (!extension_loaded('curl')) {
+      echo "A extensão 'curl' do PHP é obrigatória.";
+      return false;
+   }
+   return true;
+}
+
+function plugin_uptimemonitor_check_config() {
+   return true;
+}
