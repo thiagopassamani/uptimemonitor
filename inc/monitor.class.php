@@ -65,6 +65,14 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
             'name'  => __('Entidade')
         ];
 
+        $tab[] = [
+            'id'    => '6',
+            'table' => $this->getTable(),
+            'field' => 'criticality',
+            'name'  => __('Criticidade'),
+            'datatype' => 'specific'
+        ];
+
         return $tab;
     }
 
@@ -96,7 +104,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         $this->initForm($ID, $options);
         $this->showFormHeader($options);
 
-        // LINHA 1: Nome e Status
+        // Nome e Status
         echo "<tr class='tab_bg_1'>";
         echo "<td>Nome do Serviço:</td>";
         echo "<td>";
@@ -109,7 +117,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</td>";
         echo "</tr>";
 
-        // LINHA 2: Tipo de Verificação e URL
+        // Tipo de Verificação e URL
         echo "<tr class='tab_bg_1'>";
         echo "<td>Tipo de Verificação:</td>";
         echo "<td>";
@@ -123,7 +131,8 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
             'display' => true
         ]);
         echo "</td>";
-
+        
+        // Host
         echo "<td>Alvo (URL ou IP):</td>";
         echo "<td>";
         echo Html::input("url", ['value' => $this->fields['url']]);
@@ -131,7 +140,25 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</td>";
         echo "</tr>";
 
-        // LINHA 3: Intervalo e Badge de Status
+        // Criticidade
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>Criticidade</td>";
+        echo "<td>";
+        echo "<select name='criticality'>";
+        $criticality_levels = [
+            'low'    => 'Baixa (Ambientes de Teste/Dev)',
+            'medium' => 'Média (Serviços Internos)',
+            'high'   => 'Alta (Produção / Missão Crítica)'
+        ];
+        foreach ($criticality_levels as $key => $label) {
+            $selected = ($this->fields['criticality'] ?? '') == $key ? 'selected' : '';
+            echo "<option value='$key' $selected>$label</option>";
+        }
+        echo "</select>";
+        echo "</td>";
+        echo "</tr>";
+
+        // Intervalo e Badge de Status
         echo "<tr class='tab_bg_1'>";
         echo "<td>Intervalo (minutos):</td>";
         echo "<td>";
@@ -151,7 +178,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</td>";
         echo "</tr>";
 
-        // LINHA 4: Integração ITIL (Ativos e Grupos)
+        // Integração ITIL (Ativos e Grupos)
         echo "<tr class='tab_bg_1'>";
         echo "<td>Vincular ao Ativo (Inventário):</td>";
         echo "<td>";
@@ -175,7 +202,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</td>";
         echo "</tr>";
 
-        // LINHA 5: Janela de Manutenção
+        // Janela de Manutenção
         echo "<tr class='tab_bg_1'>";
         echo "<td colspan='4' class='center b'>Agendamento de Manutenção (Silenciar Alertas)</td>";
         echo "</tr>";
