@@ -1,10 +1,14 @@
-# 📈 GLPI Uptime Monitor (Kuma-Style)
+# 📈 GLPI Uptime Monitor (inspirado em Uptime Kuma)
+
+## EM DESENVOLVIMENTO
 
 ![GLPI Version](https://img.shields.io/badge/GLPI-10.0.0%2B-blue.svg)
 ![PHP Version](https://img.shields.io/badge/PHP-7.4%2B-8892BF.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 Um plugin nativo para GLPI que transforma o seu sistema de ITSM num poderoso Centro de Operações de Rede (NOC). Inspirado no visual e na simplicidade do Uptime Kuma, este plugin monitoriza ativamente a disponibilidade de infraestrutura, integrando-se nativamente com o ciclo de vida de incidentes, entidades e perfis do GLPI.
+
+OBS: Auxilio do Google Gemini.
 
 ## 🚀 Principais Funcionalidades
 

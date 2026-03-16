@@ -31,7 +31,7 @@ function plugin_init_uptimemonitor() {
       ];
    }
 
-   // 5. Notificações (Padrão GLPI 10)
+   //Notificações
    $PLUGIN_HOOKS['item_get_events']['uptimemonitor'] = [
       'PluginUptimemonitorMonitor' => 'getEvents'
    ];
@@ -39,7 +39,7 @@ function plugin_init_uptimemonitor() {
       'PluginUptimemonitorMonitor' => 'getTargets'
    ];
 
-   // 6. Ações Automáticas (Cron)
+   // Ações Automáticas (Cron)
    // Aponta para a classe onde criámos as funções cronInfo e cronCheck
    $PLUGIN_HOOKS['cron']['uptimemonitor'] = ['PluginUptimemonitorMonitor'];
 }
