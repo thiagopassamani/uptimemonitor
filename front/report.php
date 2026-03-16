@@ -20,39 +20,35 @@ Html::header(
     "PluginUptimemonitorMonitor" // <--- O nome exato da classe liga ao menu
 );
 
+PluginUptimemonitorMonitor::getMenuContentPluginCustom();
+
 global $DB;
 
 // Filtro de data (Padrão: mês atual)
 $month = $_GET['month'] ?? date('m');
 $year  = $_GET['year'] ?? date('Y');
 
-echo "<div class='center'>";
+echo "<div class='mt-3 table-responsive-lg '>";
 
-echo "<div class='d-flex align-items-center mb-4 gap-2' style='padding: 0 10px;'>";
-echo "  <a href='dashboard.php' class='btn btn-outline-secondary'>";
-echo "      <i class='fas fa-gauge me-1'></i> " . __("Dashboard", "uptimemonitor");
-echo "  </a>";
-echo "  <a href='report.php' class='btn btn-outline-secondary'>";
-echo "      <i class='fas fa-chart-line me-1'></i> " . __("Report SLA", "uptimemonitor");
-echo "  </a>";
-echo "  <a href='#' class='btn btn-outline-secondary' onclick='window.print();'>";
-echo "      <i class='fas fa-print me-1'></i> " . __("Imprimir", "uptimemonitor");
-echo "  </a>";
+echo "<div class='card card-sm mt-0 search-card' style='padding: 20px; margin-bottom: 20px;'>";
+
+echo "<div class='card-header d-flex justify-content-between search-header pe-0'>";
+                     
+echo "<div class='d-inline-flex search-controls'>";
+    echo "<h2>" . __("Disponibilidade Mensal - $month/$year", "uptimemonitor") . "</h2>";
+
+    echo "<form method='get' style='margin-bottom: 20px;'>";
+    echo "<label>Mês: <input type='number' name='month' value='$month' min='1' max='12'></label>";
+    echo "<label>Ano: <input type='number' name='year' value='$year' min='2024'></label>";
+    echo "<button type='submit' class='btn btn-primary'>Filtrar</button>";
+    echo "</form>";
+
 echo "</div>";
-
-
-echo "<h2>" . __("Disponibilidade Mensal - $month/$year", "uptimemonitor") . "</h2>";
-
-// Formulário simples de filtro
-echo "<form method='get' style='margin-bottom: 20px;'>";
-echo "Mês: <input type='number' name='month' value='$month' min='1' max='12'> ";
-echo "Ano: <input type='number' name='year' value='$year' min='2024'> ";
-echo "<button type='submit' class='btn btn-primary'>Filtrar</button>";
-echo "</form>";
+echo "</div>";
 
 $monitors = $DB->request(['FROM' => 'glpi_plugin_uptimemonitor_monitors']);
 
-echo "<table class='tab_cadre_fixehov'>";
+echo "<table class='search-results table card-table table-hover table-striped'>";
 echo "<tr>
         <th>" . __("Serviço") . "</th>
         <th>" . __("Total de Testes") . "</th>
@@ -87,20 +83,6 @@ foreach ($monitors as $monitor) {
     echo "<td>$up_count</td>";
     echo "<td><b style='color: $color;'>$sla%</b></td>";
     echo "</tr>";
-}
-
-// Adicione este link antes do <table> no arquivo acima
-echo "<div style='margin: 10px;' class='right'>";
-echo " <a href='report.php?month=$month&year=$year&export=csv' class='btn btn-success'>
-        <i class='fas fa-file-excel'></i> Exportar CSV</a>";
-echo "</div>";
-
-// Lógica de exportação no topo do arquivo (antes do Html::header)
-if (isset($_GET['export']) && $_GET['export'] == 'csv') {
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="uptime_report_'.$month.'_'.$year.'.csv"');
-    // ... lógica de loop fputcsv aqui ...
-    exit();
 }
 
 echo "</table>";

@@ -65,6 +65,8 @@ foreach ($monitors as $monitor) {
     echo "<div class='monitor-header'>";
     echo "<div class='monitor-name'>" . htmlspecialchars($monitor['name']);
 
+    echo "<span>Criticidade: " . htmlspecialchars($monitor['criticality'] ?? 'N/A') . "</span>";
+
     // Verifica se está em manutenção agora para exibir um ícone/aviso
     $agora = date("Y-m-d H:i:s");
     if ($monitor['is_maintenance'] == 1 && $agora >= $monitor['maintenance_start'] && $agora <= $monitor['maintenance_end']) {
