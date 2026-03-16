@@ -4,9 +4,9 @@ if (!defined('GLPI_ROOT')) { die("Access denied"); }
 
 class PluginUptimemonitorPoller extends CommonDBTM {
 
-    static function cronInfo($name) {
+static function cronInfo($name) {
         return [
-            'description' => 'Verifica o status dos monitores e gere chamados automáticos',
+            'description' => 'Verifica o estado dos monitores e gere chamados automáticos',
             'state'       => 1,
             'mode'        => 2  // CLI
         ];
@@ -15,101 +15,100 @@ class PluginUptimemonitorPoller extends CommonDBTM {
     static function cronUptimeCheck($task) {
         global $DB;
 
-        // Busca monitores ativos
-        $result = $DB->request(['FROM' => 'glpi_plugin_uptimemonitor_monitors', 'WHERE' => ['is_active' => 1]]);
+        // Busca apenas os monitores ativos
+        $result = $DB->request([
+            'FROM'  => 'glpi_plugin_uptimemonitor_monitors',
+            'WHERE' => ['is_active' => 1]
+        ]);
+
+        $total_processados = 0;
 
         foreach ($result as $monitor) {
-            $url            = $monitor['url'];
-            $tipo           = strtolower($monitor['type']);
-            $status_atual   = 'DOWN';
-            $tempo_resposta = 0;
-            $start_time     = microtime(true); // Definido aqui para todos os testes
-
-            // --- EXECUÇÃO DO TESTE BASEADO NO TIPO ---
-            switch ($tipo) {
-                case 'http':
-                    $ch = curl_init($url);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                    curl_exec($ch);
-                    
-                    if (!curl_errno($ch)) {
-                        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                        if ($http_code >= 200 && $http_code < 400) {
-                            $status_atual = 'UP';
-                        }
-                        $tempo_resposta = round(curl_getinfo($ch, CURLINFO_TOTAL_TIME) * 1000);
-                    }
-                    curl_close($ch);
-                    break;
-
-                case 'port':
-                    $parts = explode(':', $url);
-                    $host = trim($parts[0]);
-                    $port = isset($parts[1]) ? (int)trim($parts[1]) : 80;
-                    $fp = @fsockopen($host, $port, $errno, $errstr, 5);
-                    if ($fp) {
-                        $status_atual = 'UP';
-                        $tempo_resposta = round((microtime(true) - $start_time) * 1000);
-                        fclose($fp);
-                    }
-                    break;
-
-                case 'ping':
-                    $host = trim(preg_replace('/^https?:\/\//', '', $url));
-                    $cmd = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') 
-                           ? "ping -n 1 -w 1000 " . escapeshellarg($host) 
-                           : "ping -c 1 -W 1 " . escapeshellarg($host);
-                    exec($cmd, $output, $result_code);
-                    if ($result_code === 0) {
-                        $status_atual = 'UP';
-                        $tempo_resposta = round((microtime(true) - $start_time) * 1000);
-                    }
-                    break;
-                
+            
+            // ⏱️ PASSO 1: Calcular a Frequência
+            $intervalo_minutos = 15; // Padrão
+            if (isset($monitor['urgency'])) {
+                switch ($monitor['urgency']) {
+                    case 5: case 4: $intervalo_minutos = 1; break;
+                    case 3: $intervalo_minutos = 5; break;
+                }
             }
 
-            // Grava o log de performance/disponibilidade
-            $DB->insert('glpi_plugin_uptimemonitor_logs', [
-                'plugin_uptimemonitor_monitors_id' => $monitor['id'],
-                'status'        => $status_atual,
-                'response_time' => $tempo_resposta,
-                'date_creation' => date("Y-m-d H:i:s")
-            ]);
+            $ultimo_teste = strtotime($monitor['last_check'] ?? '1970-01-01');
+            $agora = time();
 
-            // --- VERIFICAÇÃO DE MUDANÇA DE STATUS ---
-            if ($monitor['last_status'] !== $status_atual) {
+            if (($agora - $ultimo_teste) >= ($intervalo_minutos * 60)) {
                 
-                // Verifica Janela de Manutenção
-                $agora = date("Y-m-d H:i:s");
-                $em_manutencao = ($monitor['is_maintenance'] == 1 && 
-                                  $agora >= $monitor['maintenance_start'] && 
-                                  $agora <= $monitor['maintenance_end']);
+                // ⚡ PASSO 2: Executar o Teste
+                $resultado_teste = self::testTarget($monitor['type'], $monitor['url']);
+                $novo_status = $resultado_teste['status'];
+                $tempo_resposta = $resultado_teste['tempo_ms'];
 
-                // Ação: O SERVIÇO CAIU
-                if ($status_atual == 'DOWN' && !$em_manutencao) {
-                    self::handleServiceDown($monitor);
-                } 
-                // Ação: O SERVIÇO VOLTOU
-                elseif ($status_atual == 'UP') {
-                    self::handleServiceUp($monitor);
+                // 📝 PASSO 3: Atualização e Logs
+                $DB->update('glpi_plugin_uptimemonitor_monitors', [
+                    'status'     => $novo_status,
+                    'last_check' => date('Y-m-d H:i:s')
+                ], [
+                    'id'         => $monitor['id']
+                ]);
+
+                $DB->insert('glpi_plugin_uptimemonitor_logs', [
+                    'monitors_id'      => $monitor['id'],
+                    'status'           => $novo_status,
+                    'response_time_ms' => $tempo_resposta,
+                    'date_creation'    => date('Y-m-d H:i:s')
+                ]);
+
+                // 🚨 PASSO 4: Gatilhos (Notificações e ITIL)
+                $estado_anterior = $monitor['status'] ?? 'UP'; 
+
+                if ($estado_anterior !== $novo_status) {
+                    if ($novo_status === 'DOWN') {
+                        self::handleServiceDown($monitor);
+                        NotificationEvent::raiseEvent('plugin_uptimemonitor_down', $monitor);
+                    } else if ($novo_status === 'UP') {
+                        self::handleServiceUp($monitor);
+                        NotificationEvent::raiseEvent('plugin_uptimemonitor_up', $monitor);
+                    }
                 }
 
-                // Atualiza o Status Principal
-                $DB->update('glpi_plugin_uptimemonitor_monitors', [
-                    'last_status' => $status_atual,
-                    'last_check'  => $agora
-                ], ['id' => $monitor['id']]);
+                $total_processados++;
             }
         }
 
-        // Limpeza de logs antigos (mais de 7 dias)
-        $DB->delete('glpi_plugin_uptimemonitor_logs', ['date_creation' => ['<', date('Y-m-d H:i:s', strtotime('-7 days'))]]);
+        $task->setVolume($total_processados);
+        return ($total_processados > 0) ? 1 : 0;
+    }
+
+    // Função isolada para executar o teste (cURL)
+    private static function testTarget($tipo, $url) {
+        $start_time = microtime(true);
+        $status = 'DOWN';
         
-        $task->addVolume(count($result));
-        return 1;
+        $tipo = strtolower($tipo);
+        if ($tipo === 'http' || $tipo === 'https') {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            
+            curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http_code >= 200 && $http_code < 400) {
+                $status = 'UP';
+            }
+        }
+
+        $end_time = microtime(true);
+        $tempo_ms = round(($end_time - $start_time) * 1000);
+
+        return [
+            'status'   => $status,
+            'tempo_ms' => $tempo_ms
+        ];
     }
 
     private static function handleServiceDown($monitor) {

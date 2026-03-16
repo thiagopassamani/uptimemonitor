@@ -135,8 +135,15 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         // Host
         echo "<td>Alvo (URL ou IP):</td>";
         echo "<td>";
-        echo Html::input("url", ['value' => $this->fields['url']]);
-        echo "<br><span style='font-size: 0.8em; color: #666;'>HTTP: https://... | Ping: 192.168... | Porta: IP:PORTA</span>";
+        echo Html::input("url", [ 'value'       => $this->fields['url'] ?? '', 'placeholder' => __('HTTP: https://... | Ping: 192.168... | Porta: IP:PORTA', 'uptimemonitor'), 'class' => 'form-control', 'size' => 60 ]);
+        echo "</td>";
+        echo "</tr>";
+
+        // Exibir no NOC
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Exibir no Monitor TV (NOC)', 'uptimemonitor') . "</td>";
+        echo "<td>";
+        Dropdown::showYesNo("is_noc", $this->fields['is_noc'] ?? 1); 
         echo "</td>";
         echo "</tr>";
 
@@ -146,9 +153,10 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "<td>";
         echo "<select name='criticality'>";
         $criticality_levels = [
-            'low'    => 'Baixa (Ambientes de Teste/Dev)',
-            'medium' => 'Média (Serviços Internos)',
-            'high'   => 'Alta (Produção / Missão Crítica)'
+            'test'   => __('Teste (Intervalo de 30 segundos)', 'uptimemonitor'),
+            'low'    => __('Baixa (Ambientes de Teste/Dev)', 'uptimemonitor'),
+            'medium' => __('Média (Serviços Internos)', 'uptimemonitor'),
+            'high'   => __('Alta (Produção / Missão Crítica)', 'uptimemonitor')
         ];
         foreach ($criticality_levels as $key => $label) {
             $selected = ($this->fields['criticality'] ?? '') == $key ? 'selected' : '';
@@ -180,7 +188,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
 
         // Integração ITIL (Ativos e Grupos)
         echo "<tr class='tab_bg_1'>";
-        echo "<td>Vincular ao Ativo (Inventário):</td>";
+        echo "<td>" . __('Vincular ao Ativo (Inventário):', 'uptimemonitor') . "</td>";
         echo "<td>";
         Dropdown::showSelectItemFromItemtypes([
             'itemtypes'        => ['Computer', 'NetworkEquipment', 'Software'],
@@ -192,7 +200,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         ]);
         echo "</td>";
 
-        echo "<td>Grupo Técnico Responsável:</td>";
+        echo "<td>" . __('Grupo Técnico Responsável:', 'uptimemonitor') . "</td>";
         echo "<td>";
         Group::dropdown([
             'name'      => 'groups_id_tech',
@@ -204,16 +212,16 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
 
         // Janela de Manutenção
         echo "<tr class='tab_bg_1'>";
-        echo "<td colspan='4' class='center b'>Agendamento de Manutenção (Silenciar Alertas)</td>";
+        echo "<td colspan='4' class='center b'>" . __('Agendamento de Manutenção (Silenciar Alertas)', 'uptimemonitor') . "</td>";
         echo "</tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td>Ativar Janela de Manutenção:</td>";
+        echo "<td>" . __('Ativar Janela de Manutenção:', 'uptimemonitor') . "</td>";
         echo "<td>";
         Dropdown::showYesNo("is_maintenance", $this->fields["is_maintenance"] ?? 0);
         echo "</td>";
 
-        echo "<td>Período da Manutenção:</td>";
+        echo "<td>" . __('Período da Manutenção:', 'uptimemonitor') . "</td>";
         echo "<td>";
         echo "Início: ";
         Html::showDateTimeField("maintenance_start", ['value' => $this->fields["maintenance_start"] ?? '']);
@@ -334,12 +342,13 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
     }
 
     // Dentro da classe PluginUptimemonitorMonitor
-   static function getEvents() {
-      return [
-         'status_down' => __('Serviço Fora do Ar', 'uptimemonitor'),
-         'status_up'   => __('Serviço Restabelecido', 'uptimemonitor')
-      ];
-   }
+    static function getEvents() {
+        return [
+            'status_down' => __('Serviço Fora do Ar', 'uptimemonitor'),
+            'status_up'   => __('Serviço Restabelecido', 'uptimemonitor')
+        ];
+    }
+
    function getTabNameForItem(CommonGLPI $item, $withtemplate = 0) {
     if ($item->getType() == __CLASS__) {
         return [
@@ -347,91 +356,170 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         ];
     }
     return '';
-}
+    }
 
-   static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0) {
+    static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0) {
       if ($tabnum == 'stats') {
            self::showStats($item);
       }
       return true;
 
-   }
+    }
 
+    static function showStats($item) {
+        global $DB;
 
-static function showStats($item) {
-      global $DB;
+        $start = (isset($_REQUEST['start']) ? intval($_REQUEST['start']) : 0);
+        $limit = $_SESSION['glpilist_limit'] ?? 50; // Usa o limite padrão do usuário no GLPI
 
-      // Busca os últimos 50 logs
-      $iterator = $DB->request([
-         'FROM'     => 'glpi_plugin_uptimemonitor_logs',
-         'WHERE'    => ['plugin_uptimemonitor_monitors_id' => $item->getID()],
-         'ORDER'    => 'date_creation DESC',
-         'LIMIT'    => 50
-      ]);
+        // Conta o total absoluto de logs para este monitor (necessário para calcular as páginas)
+        $total_number = countElementsInTable(
+            'glpi_plugin_uptimemonitor_logs', 
+            ['plugin_uptimemonitor_monitors_id' => $item->getID()]
+        );
+
+        // Busca os últimos 50 logs
+        $iterator = $DB->request([
+            'FROM'      => 'glpi_plugin_uptimemonitor_logs',
+            'WHERE'     => ['plugin_uptimemonitor_monitors_id' => $item->getID()],
+            'ORDER'     => 'date_creation DESC',
+            'START'     => $start,
+            'LIMIT'     => $limit
+        ]);
                 
-      $labels = [];
-      $data   = [];
+        $logs_array = [];
+        $labels     = [];
+        $data       = [];
                 
-      foreach ($iterator as $log) {
-         $labels[] = date("H:i", strtotime($log['date_creation']));
-         $data[]   = (int)$log['response_time_ms'];
-      }
-                
-      // Inverte para o gráfico ir da esquerda (antigo) para a direita (novo)
-      $labels = array_reverse($labels);
-      $data   = array_reverse($data);
+        foreach ($iterator as $log) {
+            $logs_array[] = $log;
+            
+            // Prepara os dados do gráfico (Data/Hora e Tempo de Resposta)
+            $labels[] = date("H:i", strtotime($log['date_creation']));
+            $data[]   = (int)$log['response_time_ms'];
+        }       
 
-      // Se não houver dados, avisa o usuário
-      if (empty($data)) {
-          echo "<div class='center shadow' style='padding:20px;'>";
-          echo "<i class='fas fa-exclamation-triangle' style='font-size:30px; color:orange;'></i>";
-          echo "<h4>Ainda não existem dados de histórico para este monitor.</h4>";
-          echo "<p>Certifique-se de que a Ação Automática está a rodar.</p></div>";
-          return;
-      }
-                
-      echo "<div class='center' style='width: 95%; height: 300px; margin: 20px auto;'>";
-      echo "<canvas id='uptimeChart'></canvas>";
-      echo "</div>";
-                
-      // Injeção de JS garantindo que o Chart.js está carregado
-      echo Html::scriptBlock("
-          // Pequeno delay para garantir que o elemento existe no DOM do GLPI
-          setTimeout(function() {
-              const ctx = document.getElementById('uptimeChart');
-              if (ctx) {
-                  new Chart(ctx, {
-                      type: 'line',
-                      data: {
-                          labels: " . json_encode($labels) . ",
-                          datasets: [{
-                              label: 'Tempo de Resposta (ms)',
-                              data: " . json_encode($data) . ",
-                              borderColor: '#2ecc71',
-                              backgroundColor: 'rgba(46, 204, 113, 0.1)',
-                              borderWidth: 2,
-                              fill: true,
-                              pointRadius: 3
-                          }]
-                      },
-                      options: {
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          scales: {
-                              y: { beginAtZero: true, title: { display: true, text: 'Milissegundos' } }
-                          }
-                      }
-                  });
-              }
-          }, 500);
-      ");
-   }
+        echo "<h3>" . __('Histórico de Disponibilidade', 'uptimemonitor') . "</h3>";
 
-   static function getTargets() {
-      return ['PluginUptimemonitorNotificationTargetMonitor'];
-   }
+        if (empty($logs_array)) {
+            echo "<div class='center shadow' style='padding:20px; background-color: #fff; border-radius: 4px;'>";
+            echo "<i class='fas fa-exclamation-triangle' style='font-size:30px; color:orange;'></i>";
+            echo "<h4>Ainda não existem dados de histórico para este monitor.</h4>";
+            echo "<p>Aguarde a execução da Ação Automática (Cron) ou force a execução.</p>";
+            echo "</div>";
+            return;
+        }
+                
+        // Inverte para o gráfico ir da esquerda (antigo) para a direita (novo)
+        $labels = array_reverse($labels);
+        $data   = array_reverse($data);
+        
+        echo "<div class='center' style='width: 95%; height: 300px; margin: 10px auto; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 4px;'>";
+        echo "<canvas id='uptimeChart'></canvas>";
+        echo "</div>";
+        
+        // Converte os arrays do PHP para JSON
+        $json_labels = json_encode($labels);
+        $json_data   = json_encode($data);
 
-   /**
+        // Injeta o script e faz o jQuery gerenciar o carregamento seguro da biblioteca externa
+        echo "<script type='text/javascript'>
+            $(function() {
+                // Função principal que desenha o gráfico
+                function initUptimeChart() {
+                    var canvas = document.getElementById('uptimeChart');
+                    if (!canvas) return; // Aborta se o elemento não existir
+                    
+                    var ctx = canvas.getContext('2d');
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: $json_labels,
+                            datasets: [{
+                                label: 'Tempo de Resposta (ms)',
+                                data: $json_data,
+                                borderColor: '#2ecc71',
+                                backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                                borderWidth: 2,
+                                fill: true,
+                                pointRadius: 4,
+                                tension: 0.3
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: { 
+                                    beginAtZero: true, 
+                                    title: { display: true, text: 'Milissegundos' } 
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Verifica se a biblioteca Chart já está carregada no GLPI
+                if (typeof Chart === 'undefined') {
+                    // Usa o jQuery para carregar a biblioteca de forma segura via AJAX
+                    $.getScript('https://cdn.jsdelivr.net/npm/chart.js')
+                        .done(function() {
+                            // Sucesso! Desenha o gráfico
+                            setTimeout(initUptimeChart, 200);
+                        })
+                        .fail(function(jqxhr, settings, exception) {
+                            console.error('Uptime Monitor: Falha ao carregar o Chart.js', exception);
+                        });
+                } else {
+                    // Se já estiver na memória, desenha direto
+                    setTimeout(initUptimeChart, 200);
+                }
+            });
+        </script>";
+        
+        echo "<div class='center' style='width: 95%; margin: 20px auto;'>";
+        echo "<table class='tab_cadre_fixehov'>"; // Classe padrão do GLPI para tabelas
+        echo "<tr class='tab_bg_2'>";
+        echo "<th>" . __('Data / Hora', 'uptimemonitor') . "</th>";
+        echo "<th>" . __('Status', 'uptimemonitor') . "</th>";
+        echo "<th>" . __('Tempo de Resposta', 'uptimemonitor') . "</th>";
+        echo "</tr>";
+
+        // Faz o loop para imprimir as linhas da tabela
+        foreach ($logs_array as $log) {
+            echo "<tr class='tab_bg_1 center'>";
+            
+            // Coluna 1: Data formatada padrão GLPI
+            echo "<td>" . Html::convDateTime($log['date_creation']) . "</td>";
+            
+            // Coluna 2: Status com cor
+            if ($log['status'] === 'UP') {
+                echo "<td><span style='color: #1e7e34; font-weight: bold;'><i class='fas fa-check-circle'></i> " . __('UP', 'uptimemonitor') . "</span></td>";
+            } else {
+                echo "<td><span style='color: #dc3545; font-weight: bold;'><i class='fas fa-times-circle'></i> " . __('DOWN', 'uptimemonitor') . "</span></td>";
+            }
+            
+            // Coluna 3: Tempo de Resposta (Se for DOWN, exibe tracejado)
+            if ($log['status'] === 'DOWN') {
+                echo "<td>-</td>";
+            } else {
+                echo "<td>" . $log['response_time_ms'] . " ms</td>";
+            }
+            
+            echo "</tr>";
+        }
+        
+        echo "</table>";
+        echo "</div>";
+        // Renderiza o controle de paginação (RODAPÉ)
+        Html::printAjaxPager(__('Histórico de Disponibilidade', 'uptimemonitor'), $start, $total_number);
+    }
+
+    static function getTargets() {
+        return ['PluginUptimemonitorNotificationTargetMonitor'];
+    }
+
+    /**
      * Informações da Ação Automática para aparecer no painel do GLPI
      */
     static function cronInfo($name) {
@@ -450,6 +538,7 @@ static function showStats($item) {
      */
     static function cronCheck($task) {
         global $DB;
+        
         $inst = new self(); 
 
         // 1. Busca monitores ativos que NÃO estão em janela de manutenção
@@ -459,20 +548,43 @@ static function showStats($item) {
         $monitors = $DB->request($query);
         
         $total_processados = 0;
+        $agora = time();
+
+        // CORREÇÃO DOS TEMPOS: High (Alta) deve ser o mais rápido, Low (Baixa) o mais demorado
+        $frequencias = [
+            'test'   => 30,  // 30 segundos - Para testes rápidos
+            'high'   => 60,  // 1 minuto - Alta (Produção / Missão Crítica)
+            'medium' => 300, // 5 minutos - Média (Serviços Internos)
+            'low'    => 900  // 15 minutos - Baixa (Ambientes de Teste/Dev)            
+        ];
 
         foreach ($monitors as $monitor) {
             $id = $monitor['id'];
             $url = $monitor['url'];
-            $type = $monitor['type']; 
+            $type = $monitor['type'];
+            
+            // Sanitiza a criticidade (garante que seja minúsculo para bater com o array)
+            // Se estiver vazio, assume 'medium' como padrão de segurança
+            $criticality = !empty($monitor['criticality']) ? strtolower($monitor['criticality']) : 'medium';  
             $old_status = $monitor['last_status'];
             
-            // 2. INICIA O CRONÓMETRO ANTES DO TESTE
+            // 2. VERIFICAÇÃO DE FREQUÊNCIA (NOVIDADE AQUI)
+            // Pega a data do último check. Se for nulo/vazio, assume 0 para testar imediatamente
+            $ultimo_check = !empty($monitor['last_check']) ? strtotime($monitor['last_check']) : 0;
+            $intervalo_necessario = isset($frequencias[$criticality]) ? $frequencias[$criticality] : 300;
+
+            // Se ainda não passou o tempo necessário, pula para o próximo host do foreach
+            if (($agora - $ultimo_check) < $intervalo_necessario) {
+                continue; 
+            }
+
+            // 3. INICIA O CRONÓMETRO ANTES DO TESTE
             $start_time = microtime(true);
             
-            // 3. EXECUTA O TESTE DINÂMICO
+            // 4. EXECUTA O TESTE DINÂMICO
             $new_status = self::testTarget($type, $url);
             
-            // 4. PARA O CRONÓMETRO E CALCULA
+            // 5. PARA O CRONÓMETRO E CALCULA
             $end_time = microtime(true);
             $response_time = round(($end_time - $start_time) * 1000); 
             
@@ -480,7 +592,7 @@ static function showStats($item) {
                 $response_time = 0; 
             }
 
-            // 5. DISPARA NOTIFICAÇÕES SE O STATUS MUDAR
+            // 6. DISPARA NOTIFICAÇÕES SE O STATUS MUDAR
             if ($old_status !== $new_status) {
                 if ($inst->getFromDB($id)) {
                     if ($new_status === 'DOWN') {
@@ -491,7 +603,7 @@ static function showStats($item) {
                 }
             }
             
-            // 6. ATUALIZA O STATUS NO MONITOR PRINCIPAL
+            // 7. ATUALIZA O STATUS NO MONITOR PRINCIPAL
             $DB->update('glpi_plugin_uptimemonitor_monitors', [
                 'last_status' => $new_status,
                 'last_check'  => date('Y-m-d H:i:s')
@@ -499,7 +611,7 @@ static function showStats($item) {
                 'id' => $id
             ]);
 
-            // 7. GRAVA O LOG NO HISTÓRICO
+            // 8. GRAVA O LOG NO HISTÓRICO
             $DB->insert('glpi_plugin_uptimemonitor_logs', [
                 'plugin_uptimemonitor_monitors_id' => $id,
                 'status'           => $new_status,
@@ -544,5 +656,33 @@ static function showStats($item) {
             ]
         ];
         return $menu;
+    }
+    /*
+    static function getEvents() {
+        return [
+            'status_down' => __('Serviço Fora do Ar', 'uptimemonitor'),
+            'status_up'   => __('Serviço Restabelecido', 'uptimemonitor')
+        ];
+    }
+    */
+    static function getMenuContentPluginCustom() {
+        echo "<div btn-group flex-wrap mb-3'>";
+        echo "<span class='btn bg-blue-lt pe-none' aria-disabled='true'>Ações</span>";
+        echo "  <a href='monitor.form.php' class='btn btn-outline-secondary'>";
+        echo "      <i class='fas fa-plus fa-lg me-2'></i> " . __("Adicionar", "uptimemonitor");
+        echo "  </a>";
+        echo "  <a href='dashboard.php' class='btn btn-outline-secondary'>";
+        echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("Dashboard", "uptimemonitor");
+        echo "  </a>";
+        echo "  <a href='monitortv.php' class='btn btn-outline-secondary'>";
+        echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("TV", "uptimemonitor");
+        echo "  </a>";
+        echo "  <a href='report.php' class='btn btn-outline-secondary'>";
+        echo "      <i class='fas fa-chart-line fa-lg me-2'></i> " . __("Report SLA", "uptimemonitor");
+        echo "  </a>";
+        echo "  <a href='#' class='btn btn-outline-secondary' onclick='window.print();'>";
+        echo "      <i class='fas fa-print fa-lg me-2'></i> " . __("Imprimir", "uptimemonitor");
+        echo "  </a>";                    
+        echo "</div>";
     }
 }
