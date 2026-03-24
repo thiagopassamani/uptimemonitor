@@ -26,7 +26,7 @@ function plugin_uptimemonitor_install() {
             `maintenance_end` timestamp NULL DEFAULT NULL, 
             `groups_id_tech` int(11) unsigned NOT NULL DEFAULT '0', 
             `criticality` varchar(50) NOT NULL DEFAULT 'low',
-            `is_noc` tinyint(1) NOT NULL DEFAULT '0' 
+            `is_noc` tinyint(1) NOT NULL DEFAULT '0',
             PRIMARY KEY (`id`) 
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
 
@@ -45,6 +45,7 @@ function plugin_uptimemonitor_install() {
             `id` int(11) NOT NULL AUTO_INCREMENT,
             `plugin_uptimemonitor_monitors_id` int(11) NOT NULL,
             `status` varchar(50) NOT NULL,
+            `in_maintenance` TINYINT(1) NOT NULL DEFAULT 0,
             `response_time_ms` int(11) NOT NULL,
             `date_creation` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),

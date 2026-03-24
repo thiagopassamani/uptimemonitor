@@ -21,7 +21,8 @@ function plugin_init_uptimemonitor() {
    ]);
 
    // Gestão de Direitos
-   $PLUGIN_HOOKS['rights']['uptimemonitor'] = 'Uptime Monitor';
+   //$PLUGIN_HOOKS['rights']['uptimemonitor'] = 'Uptime Monitor';
+   $PLUGIN_HOOKS['rights']['uptimemonitor'] = 'uptimemonitor';
 
    // 4. Menus (Aparecerá em Plugins > Uptime Monitor)
    // Alterado para 'ticket' para que o pessoal do NOC consiga ver o menu e breadcrumb
