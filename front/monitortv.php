@@ -14,6 +14,8 @@ Html::header(
     "PluginUptimemonitorMonitor" // <--- O nome exato da classe liga ao menu
 );
 
+PluginUptimemonitorMonitor::getMenuContentPluginCustom();
+
 global $DB;
 
 // 2. Estatísticas Rápidas (Contadores)
@@ -47,7 +49,24 @@ echo "    <div style='display: flex; justify-content: center; gap: 30px; margin-
           </div>";
 
 // 4. Grid de Monitores
-$res = $DB->request(['FROM' => 'glpi_plugin_uptimemonitor_monitors', 'ORDER' => 'name ASC']);
+//$res = $DB->request(['FROM' => 'glpi_plugin_uptimemonitor_monitors', 'ORDER' => 'name ASC']);
+
+$res = $DB->request([
+    'SELECT' => [
+        'm.*',
+        new \QueryExpression('COUNT(l.id) AS total_logs'),
+        new \QueryExpression('SUM(CASE WHEN l.status = "UP" THEN 1 ELSE 0 END) AS up_count')
+    ],
+    'FROM'      => 'glpi_plugin_uptimemonitor_monitors AS m',
+    'LEFT JOIN' => [
+        'glpi_plugin_uptimemonitor_logs AS l' => [
+            'ON' => ['l' => 'plugin_uptimemonitor_monitors_id', 'm' => 'id']
+        ]
+    ],
+    //'WHERE'     => ['l.response_time_ms' => ['>', 1]],
+    'GROUPBY'   => 'm.id',
+    'ORDER'     => 'm.criticality DESC, m.name ASC'
+]);
 
 echo "<div style='display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:10px;'>";
 
@@ -59,10 +78,9 @@ foreach ($res as $row) {
     $icon = $is_down ? 'fa-exclamation-triangle' : 'fa-check-circle';
 
                             
-    $total    = $row['total'] ?? 0;
-    $up_count = $row['up'] ?? 0;
+    $total    = $row['total_logs'] ?? 0;
+    $up_count = $row['up_count'] ?? 0;
     $sla      = ($total > 0) ? round(($up_count / $total) * 100, 2) : 0;
-        // Cor baseada no SLA (ex: abaixo de 99% fica vermelho)
     $slaColor = ($sla >= 99) ? "green" : "red";
 
     // Link para o formulário de edição/detalhes
@@ -80,7 +98,10 @@ foreach ($res as $row) {
                         <i class='fas fa-info-circle'></i> ".htmlspecialchars($row['criticality'] ?? 'N/A')."<br>
                         <i class='fas fa-link'></i> ".htmlspecialchars($row['url'])."<br>
                         <i class='fas fa-clock'></i> ".(Html::convDateTime($row['last_check']) ?: '--')."
+                        <span>Tempo de atividade: <b style='color: $slaColor;'>$sla%</b></span><br>
+                        <!--
                         <span>Tempo de atividade (SLA): <b style='color: $slaColor;'>$sla%</b> [ 24 horas: 100% | 30 dias: 100% | 1 ano: 100% ]</span><br>
+                        -->
                     </div>";
     
     // Se houver um chamado aberto, mostra o ID

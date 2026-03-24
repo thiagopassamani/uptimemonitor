@@ -1,9 +1,17 @@
 <?php
 include ("../../../inc/includes.php");
 Session::checkLoginUser();
-Session::checkRight('config', UPDATE);
+
+Session::checkRight('uptimemonitor', READ);
 
 $monitor = new PluginUptimemonitorMonitor();
+
+// Se for uma edição (ID > 0), tenta carregar o item
+if (isset($_GET["id"]) && $_GET["id"] > 0) {
+   if (!$monitor->getFromDB($_GET["id"])) {
+      Html::displayNotFoundError(); // Se o ID não existir no banco
+   }
+}
 
 if (isset($_POST["add"])) {
    $monitor->add($_POST);
@@ -20,7 +28,7 @@ Html::header(
     __('Formulário do Monitor', 'uptimemonitor'), 
     $_SERVER['PHP_SELF'], 
     "plugins", 
-    "PluginUptimemonitorMonitor" // <--- O nome exato da classe liga ao menu
+    "PluginUptimemonitorMonitor"
 );
 
 $id = $_GET["id"] ?? -1;

@@ -4,20 +4,17 @@ include ("../../../inc/includes.php");
 
 Session::checkLoginUser();
 
-// BARRAGEM DE LEITURA: Qualquer perfil que possa ler tickets tem acesso ao NOC
 Session::checkRight('ticket', READ);
-
-echo Html::script('public/lib/chart.js'); // Caminho nativo do GLPI 10
 
 Html::header(
     __('Dashboard - Uptime Monitor', 'uptimemonitor'), 
     $_SERVER['PHP_SELF'], 
     "plugins", 
-    "PluginUptimemonitorMonitor" // <--- O nome exato da classe liga ao menu
+    "PluginUptimemonitorMonitor"
 );
-global $DB;
 
-// 1. O CSS para recriar o visual do Uptime Kuma
+PluginUptimemonitorMonitor::getMenuContentPluginCustom();
+
 echo "
 <style>
     .uptime-container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; padding: 20px; font-family: sans-serif; }
@@ -41,12 +38,13 @@ echo "
     .beat.pending { background-color: #f0f0f0; } /* Sem dados ainda */
 </style>
 ";
+global $DB;
 
 // 2. Busca os monitores ativos respeitando a Entidade atual do usuário
 $query_monitors = "SELECT * FROM `glpi_plugin_uptimemonitor_monitors` 
                    WHERE `is_active` = 1 " . 
                    getEntitiesRestrictRequest("AND", "glpi_plugin_uptimemonitor_monitors", "entities_id", $_SESSION['glpiactiveentities'], true) . " 
-                   ORDER BY `name` ASC";
+                   ORDER BY `criticality` DESC, `name` ASC";
 
 $monitors = $DB->request($query_monitors);
 
@@ -65,7 +63,7 @@ foreach ($monitors as $monitor) {
     echo "<div class='monitor-header'>";
     echo "<div class='monitor-name'>" . htmlspecialchars($monitor['name']);
 
-    echo "<span>Criticidade: " . htmlspecialchars($monitor['criticality'] ?? 'N/A') . "</span>";
+    //echo "<span>Criticidade: " . htmlspecialchars($monitor['criticality'] ?? 'N/A') . "</span>";
 
     // Verifica se está em manutenção agora para exibir um ícone/aviso
     $agora = date("Y-m-d H:i:s");
@@ -120,11 +118,11 @@ foreach ($monitors as $monitor) {
         echo "<div class='beat {$b_class}' title='{$tooltip}'></div>";
     }
     
-    echo "</div>"; // Fecha heartbeat-bar
-    echo "</div>"; // Fecha monitor-card
+    echo "</div>"; 
+    echo "</div>"; 
 }
 
-echo "</div>"; // Fecha uptime-container
+echo "</div>";
 
 echo "
 <script>
