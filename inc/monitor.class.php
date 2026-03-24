@@ -6,10 +6,10 @@ if (!defined('GLPI_ROOT')) {
 
 class PluginUptimemonitorMonitor extends CommonDBTM {
 
-   // 1. O Direito para segurança continua estático
-   static $rightname = 'config';
+   // Permissão de acesso (definida como "uptimemonitor" para facilitar o controle via interface de perfis do GLPI)
+   static $rightname = 'uptimemonitor';
 
-   // Removido o "static" destas funções
+   // Indica que este item pode ser atribuído a uma entidade
    function isEntityAssign() {
       return true;
    }
@@ -104,17 +104,37 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         $this->initForm($ID, $options);
         $this->showFormHeader($options);
 
+        echo "<tbody>";
+        echo "<tr>";
+        echo "<th colspan='4'>" . __('Dados do host', 'uptimemonitor') . "</th>";
+        echo "</tr>";
+        echo "</tbody>";
+
         // Nome e Status
         echo "<tr class='tab_bg_1'>";
         echo "<td>Nome do Serviço:</td>";
         echo "<td>";
         echo Html::input("name", ['value' => $this->fields['name']]);
         echo "</td>";
-        
+        echo "</tr>";
+
+        echo "<tr class='tab_bg_1'>";
         echo "<td>Ativo:</td>";
         echo "<td>";
         Dropdown::showYesNo("is_active", $this->fields["is_active"] ?? 1);
         echo "</td>";
+        echo "<td>Status Atual:</td>";
+        echo "<td>";
+        $status_atual = $this->fields["last_status"] ?? 'PENDING';
+        if ($status_atual == 'UP') {
+            echo "<span style='background-color: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold;'>UP</span>";
+        } elseif ($status_atual == 'DOWN') {
+            echo "<span style='background-color: #dc3545; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold;'>DOWN</span>";
+        } else {
+            echo "<span style='background-color: #6c757d; color: white; padding: 5px 10px; border-radius: 4px;'>Aguardando Teste</span>";
+        }
+        echo "</td>";
+        echo "</tr>";
         echo "</tr>";
 
         // Tipo de Verificação e URL
@@ -139,14 +159,6 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</td>";
         echo "</tr>";
 
-        // Exibir no NOC
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Exibir no Monitor TV (NOC)', 'uptimemonitor') . "</td>";
-        echo "<td>";
-        Dropdown::showYesNo("is_noc", $this->fields['is_noc'] ?? 1); 
-        echo "</td>";
-        echo "</tr>";
-
         // Criticidade
         echo "<tr class='tab_bg_1'>";
         echo "<td>Criticidade</td>";
@@ -164,25 +176,9 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         }
         echo "</select>";
         echo "</td>";
-        echo "</tr>";
-
-        // Intervalo e Badge de Status
-        echo "<tr class='tab_bg_1'>";
         echo "<td>Intervalo (minutos):</td>";
         echo "<td>";
         echo Html::input("check_interval", ['type' => 'number', 'min' => 1, 'value' => $this->fields['check_interval'] ?? 5]);
-        echo "</td>";
-
-        echo "<td>Status Atual:</td>";
-        echo "<td>";
-        $status_atual = $this->fields["last_status"] ?? 'PENDING';
-        if ($status_atual == 'UP') {
-            echo "<span style='background-color: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold;'>UP</span>";
-        } elseif ($status_atual == 'DOWN') {
-            echo "<span style='background-color: #dc3545; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold;'>DOWN</span>";
-        } else {
-            echo "<span style='background-color: #6c757d; color: white; padding: 5px 10px; border-radius: 4px;'>Aguardando Teste</span>";
-        }
         echo "</td>";
         echo "</tr>";
 
@@ -209,11 +205,21 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         ]);
         echo "</td>";
         echo "</tr>";
-
-        // Janela de Manutenção
-        echo "<tr class='tab_bg_1'>";
-        echo "<td colspan='4' class='center b'>" . __('Agendamento de Manutenção (Silenciar Alertas)', 'uptimemonitor') . "</td>";
+        
+        echo "<tr>";
+        echo "<th colspan='4'>" . __('NOC', 'uptimemonitor'). "</th>";
         echo "</tr>";
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Exibir no Monitor TV (NOC)', 'uptimemonitor') . "</td>";
+        echo "<td>";
+        Dropdown::showYesNo("is_noc", $this->fields['is_noc'] ?? 1); 
+        echo "</td>";
+        echo "</tr>";        
+
+        echo "<tr>";
+        echo "<th colspan='4'>" . __('Agendamento de Manutenção (Silenciar Alertas)', 'uptimemonitor'). "</th>";
+        echo "</tr>";
+
 
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Ativar Janela de Manutenção:', 'uptimemonitor') . "</td>";
@@ -322,7 +328,8 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
 
             case 'ping':
                 $host = parse_url($url, PHP_URL_HOST) ?: $url;
-                $exec = stristr(PHP_OS, 'WIN') ? "ping -n 1 -w 1000 $host" : "ping -c 1 -W 1 $host";
+                //$exec = stristr(PHP_OS, 'WIN') ? "ping -n 1 -w 1000 $host" : "ping -c 1 -W 1 $host";
+                $exec = stristr(PHP_OS, 'WIN') ? "ping -n 1 -w 1000 " . escapeshellarg($host) : "LC_ALL=C /bin/ping -c 1 -W 3 " . escapeshellarg($host);
                 exec($exec, $output, $result);
                 return ($result === 0) ? 'UP' : 'DOWN';
  
@@ -495,6 +502,8 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
             // Coluna 2: Status com cor
             if ($log['status'] === 'UP') {
                 echo "<td><span style='color: #1e7e34; font-weight: bold;'><i class='fas fa-check-circle'></i> " . __('UP', 'uptimemonitor') . "</span></td>";
+            } elseif ($log['status'] === 'MAINT') {
+                echo "<td><span style='color: #f39c12; font-weight: bold;'><i class='fas fa-tools'></i> " . __('MANUTENÇÃO', 'uptimemonitor') . "</span></td>";
             } else {
                 echo "<td><span style='color: #dc3545; font-weight: bold;'><i class='fas fa-times-circle'></i> " . __('DOWN', 'uptimemonitor') . "</span></td>";
             }
@@ -542,11 +551,13 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         $inst = new self(); 
 
         // 1. Busca monitores ativos que NÃO estão em janela de manutenção
-        $query = "SELECT * FROM `glpi_plugin_uptimemonitor_monitors` 
-                  WHERE `is_active` = 1 
-                  AND (`is_maintenance` = 0 OR `maintenance_end` < '" . date('Y-m-d H:i:s') . "')";
-        $monitors = $DB->request($query);
         
+        $date_hora_atual = date('Y-m-d H:i:s');
+        $monitors = $DB->request([
+            'FROM'  => 'glpi_plugin_uptimemonitor_monitors',
+            'WHERE' => ['is_active' => 1]
+        ]);
+                
         $total_processados = 0;
         $agora = time();
 
@@ -562,7 +573,58 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
             $id = $monitor['id'];
             $url = $monitor['url'];
             $type = $monitor['type'];
-            
+
+            // Verifica se o monitor está em janela de manutenção (caso a manutenção seja programada, mas o campo is_maintenance ainda esteja 0)
+            if ($monitor['is_maintenance'] == 1) {
+                // Tem data de fim e ela já passou?
+                if (!empty($monitor['maintenance_end']) && strtotime($monitor['maintenance_end']) <= $agora) {
+                    
+                    // 1. Tira do modo de manutenção no Banco de Dados
+                    $DB->update('glpi_plugin_uptimemonitor_monitors', [
+                        'is_maintenance' => 0,
+                        'maintenance_start' => 'NULL',
+                        'maintenance_end' => 'NULL'
+                    ], ['id' => $id]);
+                    
+                    // 2. Atualiza a variável local para o teste rodar agora
+                    $monitor['is_maintenance'] = 0;
+                    
+                    // 3. (Opcional) Enviar Telegram avisando que a manutenção acabou
+                    $host_name = $monitor['name'] ?: $url;
+                    $msg = "🔧 <b>Aviso de Manutenção</b>\n";
+                    $msg .= "O período de manutenção de <b>{$host_name}</b> foi concluído.\nO monitoramento foi reativado.";
+                    self::sendTelegramNotification($msg);
+                    
+                } else {
+                    // A manutenção ainda está válida!
+
+                    // Verifica a frequência antes de logar para não inundar o banco
+                    $criticality = !empty($monitor['criticality']) ? strtolower($monitor['criticality']) : 'medium';
+                    $ultimo_check = !empty($monitor['last_check']) ? strtotime($monitor['last_check']) : 0;
+                    $intervalo_necessario = isset($frequencias[$criticality]) ? $frequencias[$criticality] : 300;
+
+                    if (($agora - $ultimo_check) >= $intervalo_necessario) {
+                        
+                        // Atualiza a data do último check no monitor
+                        $DB->update('glpi_plugin_uptimemonitor_monitors', [
+                            'last_check'  => date('Y-m-d H:i:s')
+                        ], ['id' => $id]);
+
+                        // Grava o log de manutenção com tempo de resposta zerado
+                        $DB->insert('glpi_plugin_uptimemonitor_logs', [
+                            'plugin_uptimemonitor_monitors_id' => $id,
+                            'status'           => 'MAINT',
+                            'response_time_ms' => 0,
+                            'date_creation'    => date('Y-m-d H:i:s')
+                        ]);
+                        
+                        $total_processados++;
+                    }
+
+                    // Pula o teste real de rede (Ping/HTTP) para não gerar alertas falsos
+                    continue; 
+                }
+            }
             // Sanitiza a criticidade (garante que seja minúsculo para bater com o array)
             // Se estiver vazio, assume 'medium' como padrão de segurança
             $criticality = !empty($monitor['criticality']) ? strtolower($monitor['criticality']) : 'medium';  
@@ -597,6 +659,15 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
                 if ($inst->getFromDB($id)) {
                     if ($new_status === 'DOWN') {
                         NotificationEvent::raiseEvent('status_down', $inst);
+                        
+                        // Telegram Notification (NOVIDADE)
+                        $host_name = $monitor['name'] ?: $monitor['url'];
+                        $msg = "🚨 <b>Monitor de Uptime</b>\n";
+                        $msg .= "O servidor <b>{$host_name}</b> está OFFLINE!\n";
+                        $msg .= "Verificado em: " . date('d/m/Y H:i:s');
+
+                        self::sendTelegramNotification($msg);
+
                     } elseif ($new_status === 'UP' && $old_status === 'DOWN') {
                         NotificationEvent::raiseEvent('status_up', $inst);
                     }
@@ -643,7 +714,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         $menu = [
             'title' => __("Uptime Monitor", 'uptimemonitor'),
             'page'  => "/plugins/uptimemonitor/front/monitor.php",
-            'icon'  => 'fas fa-heartbeat', // Ícone de batimento cardíaco
+            'icon'  => 'fas fa-heartbeat',
             'options' => [
                 'monitor' => [
                     'title' => __('Uptime Monitor', 'uptimemonitor'),
@@ -657,14 +728,10 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         ];
         return $menu;
     }
-    /*
-    static function getEvents() {
-        return [
-            'status_down' => __('Serviço Fora do Ar', 'uptimemonitor'),
-            'status_up'   => __('Serviço Restabelecido', 'uptimemonitor')
-        ];
-    }
-    */
+
+    /**
+     * Conteúdo do menu personalizado para as páginas do plugin (Adicionar, Dashboard, TV, NOC, Report)
+     */
     static function getMenuContentPluginCustom() {
         echo "<div btn-group flex-wrap mb-3'>";
         echo "<span class='btn bg-blue-lt pe-none' aria-disabled='true'>Ações</span>";
@@ -677,6 +744,9 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "  <a href='monitortv.php' class='btn btn-outline-secondary'>";
         echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("TV", "uptimemonitor");
         echo "  </a>";
+        echo "  <a href='monitor.noc.php' class='btn btn-outline-secondary'>";
+        echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("NOC", "uptimemonitor");
+        echo "  </a>";
         echo "  <a href='report.php' class='btn btn-outline-secondary'>";
         echo "      <i class='fas fa-chart-line fa-lg me-2'></i> " . __("Report SLA", "uptimemonitor");
         echo "  </a>";
@@ -684,5 +754,35 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "      <i class='fas fa-print fa-lg me-2'></i> " . __("Imprimir", "uptimemonitor");
         echo "  </a>";                    
         echo "</div>";
+    }
+
+    /**
+    * Envia notificação via Telegram
+    * @param string $message Mensagem a ser enviada
+    */
+    public static function sendTelegramNotification($message) {
+        // Recomendo salvar essas configs em uma tabela de configuração ou constante
+        $botToken = "8681061435:AAFDezvJSgkfpTnTgahG13FyLInoXllyt2k";
+        $chatId   = "8600007386";
+
+        $url = "https://api.telegram.org/bot$botToken/sendMessage";
+
+        $data = [
+            'chat_id'    => $chatId,
+            'text'       => $message,
+            'parse_mode' => 'HTML' // Permite usar <b>, <i>, etc.
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+        $result = curl_exec($ch);
+        curl_close($ch);
+
+        return $result;
     }
 }
