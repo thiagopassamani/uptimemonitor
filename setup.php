@@ -15,7 +15,9 @@ function plugin_init_uptimemonitor() {
    Plugin::registerClass('PluginUptimemonitorMonitor', [
       'addtabon' => ['PluginUptimemonitorMonitor']
    ]);
+   Plugin::registerClass('PluginUptimemonitorCron');
    Plugin::registerClass('PluginUptimemonitorLog');
+   Plugin::registerClass('PluginUptimemonitorConfig');
    Plugin::registerClass('PluginUptimemonitorProfile', [
        'addtabon' => ['Profile']
    ]);
@@ -26,7 +28,7 @@ function plugin_init_uptimemonitor() {
 
    // 4. Menus (Aparecerá em Plugins > Uptime Monitor)
    // Alterado para 'ticket' para que o pessoal do NOC consiga ver o menu e breadcrumb
-   if (Session::haveRight('ticket', READ)) {
+   if (Session::haveRight('uptimemonitor', READ)) {
       $PLUGIN_HOOKS['menu_toadd']['uptimemonitor'] = [
          'plugins' => 'PluginUptimemonitorMonitor'
       ];
@@ -41,8 +43,8 @@ function plugin_init_uptimemonitor() {
    ];
 
    // Ações Automáticas (Cron)
-   // Aponta para a classe onde criámos as funções cronInfo e cronCheck
-   $PLUGIN_HOOKS['cron']['uptimemonitor'] = ['PluginUptimemonitorMonitor'];
+   // Aponta para a classe dedicada ao cron do plugin (agora em inc/cron.class.php)
+   $PLUGIN_HOOKS['cron']['uptimemonitor'] = ['PluginUptimemonitorCron'];
 }
 
 /**

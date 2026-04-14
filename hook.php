@@ -27,13 +27,16 @@ function plugin_uptimemonitor_install() {
             `groups_id_tech` int(11) unsigned NOT NULL DEFAULT '0', 
             `criticality` varchar(50) NOT NULL DEFAULT 'low',
             `is_noc` tinyint(1) NOT NULL DEFAULT '0',
+            `itilcategories_id` int(11) NOT NULL DEFAULT 0,
+            `auto_create_ticket` tinyint(1) NOT NULL DEFAULT '0',
             PRIMARY KEY (`id`) 
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
 
-        $query_insert = "INSERT INTO `glpi_plugin_uptimemonitor_monitors` 
-            (`id`, `name`, `url`, `type`, `check_interval`, `is_active`, `last_status`, `last_check`, `entities_id`, `is_recursive`, `itemtype`, `items_id`, `current_tickets_id`, `is_maintenance`, `maintenance_start`, `maintenance_end`, `groups_id_tech`, `criticality`) 
-            VALUES 
-            (1, 'Google DNS', '8.8.8.8', 'ping', 5, 1, NULL, NULL, 0, 0, '0', 0, 0, 0, NULL, NULL, 0, 'low');";
+        $query_insert = "INSERT INTO `glpi_plugin_uptimemonitor_monitors` (`id`, `name`, `url`, `type`, `check_interval`, `is_active`, `last_status`, `last_check`, `entities_id`, `is_recursive`, `itemtype`, `items_id`, `current_tickets_id`, `is_maintenance`, `maintenance_start`, `maintenance_end`, `groups_id_tech`, `criticality`, `is_noc`, `auto_create_ticket`, `itilcategories_id`) VALUES
+            (1, 'Google DNS1', '8.8.8.8', 'ping', 15, 1, 'UP', '2026-03-31 00:03:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'low', 1, 0, 0),
+            (2, 'Google DNS2', '8.8.4.4', 'ping', 1, 1, 'UP', '2026-03-31 00:09:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 0, 0),
+            (3, 'Cloudflare DNS1', '1.1.1.1', 'ping', 5, 1, 'UP', '2026-03-31 00:09:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 1, 3),
+            (4, 'Cloudflare DNS2', '1.1.2.2', 'ping', 5, 1, 'DOWN', '2026-03-31 00:09:54', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 0, 0);";
         
         $DB->queryOrDie($query, $DB->error());
         $DB->queryOrDie($query_insert, $DB->error());
@@ -56,7 +59,57 @@ function plugin_uptimemonitor_install() {
         $DB->queryOrDie($query, $DB->error());
     }
 
+    // Cria a tabela de Configurações do Plugin
+    if (!$DB->tableExists("glpi_plugin_uptimemonitor_configs")) {
+        $query = "CREATE TABLE `glpi_plugin_uptimemonitor_configs` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `entities_id` int(11) unsigned NOT NULL DEFAULT '0',
+            `name` varchar(255) NOT NULL UNIQUE,
+            `value` longtext,
+            `type` varchar(50) DEFAULT 'string',
+            `date_mod` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY (`name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+        
+        $DB->queryOrDie($query, $DB->error());
+
+        // Insere configurações padrão
+        $default_configs = [
+            ['name' => 'telegram_enabled', 'value' => '0', 'type' => 'boolean'],
+            ['name' => 'telegram_api_key', 'value' => '', 'type' => 'password'],
+            ['name' => 'telegram_chat_id', 'value' => '', 'type' => 'string'],
+            ['name' => 'email_notifications', 'value' => '1', 'type' => 'boolean'],
+            ['name' => 'slack_enabled', 'value' => '0', 'type' => 'boolean'],
+            ['name' => 'slack_webhook_url', 'value' => '', 'type' => 'password'],
+            ['name' => 'notification_on_down', 'value' => '1', 'type' => 'boolean'],
+            ['name' => 'notification_on_up', 'value' => '1', 'type' => 'boolean'],
+            ['name' => 'create_ticket_on_down', 'value' => '0', 'type' => 'boolean'],
+            ['name' => 'ticket_category', 'value' => '', 'type' => 'string'],
+            ['name' => 'sla_response_time', 'value' => '30', 'type' => 'integer'],
+        ];
+
+        foreach ($default_configs as $config) {
+            $DB->insert('glpi_plugin_uptimemonitor_configs', [
+                'name'   => $config['name'],
+                'value'  => $config['value'],
+                'type'   => $config['type'],
+                'entities_id' => 0
+            ]);
+        }
+    }
+
     $migration->executeMigration();
+
+    // Configurar permissões para o super-admin (ID 4 no GLPI)
+    $profileRight = new ProfileRight();
+    if (!$profileRight->getFromDBByCrit(['profiles_id' => 4, 'name' => 'uptimemonitor'])) {
+        $profileRight->add([
+            'profiles_id' => 4, // Super-admin profile ID
+            'name'        => 'uptimemonitor',
+            'rights'      => (READ | CREATE | UPDATE | PURGE | DELETE) // Todos os direitos
+        ]);
+    }
 
     // Regista a Ação Automática
     $cron = new CronTask();
@@ -80,6 +133,7 @@ function plugin_uptimemonitor_uninstall() {
     // Remove as tabelas se o utilizador decidir desinstalar e limpar os dados
     $DB->query("DROP TABLE IF EXISTS `glpi_plugin_uptimemonitor_monitors`");
     $DB->query("DROP TABLE IF EXISTS `glpi_plugin_uptimemonitor_logs`");
+    $DB->query("DROP TABLE IF EXISTS `glpi_plugin_uptimemonitor_configs`");
 
     return true;
 }
