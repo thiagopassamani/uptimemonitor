@@ -1,25 +1,38 @@
 <?php
+/**
+ * Uptime Monitor Plugin for GLPI
+ * Author: Thiago Passamani
+ * @class PluginUptimemonitorNotificationTargetMonitor
+ * This class defines a notification target for monitor-related events, allowing the use of monitor data in notification templates.
+ */
 
 class PluginUptimemonitorNotificationTargetMonitor extends NotificationTarget {
 
-   function getEvents() {
-      return PluginUptimemonitorMonitor::getEvents();
-   }
+    public function getEvents() {
+        return PluginUptimemonitorMonitor::getEvents();
+    }
 
-   function addDataForObject(CommonDBTM $item, array $options) {
-      // Define as variáveis que o usuário poderá usar no modelo de e-mail
-      $this->data['##monitor.name##']  = $item->fields['name'];
-      $this->data['##monitor.url##']   = $item->fields['url'];
-      $this->data['##monitor.status##'] = $item->fields['last_status'];
-      $this->data['##monitor.date##']   = Html::convDateTime(date("Y-m-d H:i:s"));
-   }
+    public function addDataForTemplate($event, $options = []) {
+    //public function addDataForTemplate(CommonDBTM $item, array $options = []) {
+    
+        $fields = $item->fields ?? [];
 
-   function getTags() {
-      return [
-         '##monitor.name##'   => __('Nome', 'uptimemonitor'),
-         '##monitor.url##'    => __('URL/IP', 'uptimemonitor'),
-         '##monitor.status##' => __('Status', 'uptimemonitor'),
-         '##monitor.date##'   => __('Data/Hora', 'uptimemonitor'),
-      ];
-   }
+        $this->data['##monitor.name##']           = $fields['name']             ?? __('N/A', 'uptimemonitor');
+        $this->data['##monitor.url##']            = $fields['url']              ?? __('N/A', 'uptimemonitor');
+        $this->data['##monitor.status##']         = $fields['last_status']      ?? __('N/A', 'uptimemonitor');
+        $this->data['##monitor.date##']           = Html::convDateTime($fields['last_check'] ?? date("Y-m-d H:i:s"));
+        $this->data['##monitor.response_time##']  = $fields['response_time']    ?? __('N/A', 'uptimemonitor');
+        $this->data['##monitor.criticality##']    = $fields['criticality']      ?? __('N/A', 'uptimemonitor');
+    }
+
+    public function getTags() {
+        return [
+            '##monitor.name##'          => __('Nome', 'uptimemonitor'),
+            '##monitor.url##'           => __('URL/IP', 'uptimemonitor'),
+            '##monitor.status##'        => __('Status', 'uptimemonitor'),
+            '##monitor.date##'          => __('Data/Hora', 'uptimemonitor'),
+            '##monitor.response_time##' => __('Tempo de Resposta', 'uptimemonitor'),
+            '##monitor.criticality##'   => __('Criticidade', 'uptimemonitor'),
+        ];
+    }
 }

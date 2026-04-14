@@ -214,7 +214,20 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "<td>";
         Dropdown::showYesNo("is_noc", $this->fields['is_noc'] ?? 1); 
         echo "</td>";
-        echo "</tr>";        
+        echo "</tr>";
+        echo "<tr class='tab_bg_1'>";
+        echo "<td>" . __('Registrar Chamado Automático', 'uptimemonitor') . "</td>";
+        echo "<td>";
+        Dropdown::showYesNo("auto_create_ticket", $this->fields['auto_create_ticket'] ?? 0);
+        echo "</td>";
+        echo "<td>" . __('Categoria do Chamado:', 'uptimemonitor') . "</td>";
+        echo "<td>";
+        ITILCategory::dropdown([
+            'name'  => 'itilcategories_id',
+            'value' => $this->fields['itilcategories_id'] ?? 0,
+        ]);
+        echo "</td>";
+        echo "</tr>";       
 
         echo "<tr>";
         echo "<th colspan='4'>" . __('Agendamento de Manutenção (Silenciar Alertas)', 'uptimemonitor'). "</th>";
@@ -242,6 +255,16 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
     }
 
     public function prepareInputForAdd($input) {
+        // Assegurar entidade padrão (necessário no GLPI para validar o contexto)
+        if (empty($input['entities_id']) && isset($_SESSION['glpiactive_entity'])) {
+            $input['entities_id'] = $_SESSION['glpiactive_entity'];
+        }
+
+        // Garantir valor padrão para check_interval se vazio
+        if (empty($input['check_interval']) || !is_numeric($input['check_interval'])) {
+            $input['check_interval'] = 5; // valor padrão de 5 minutos
+        }
+
         // Se a data de manutenção estiver vazia, removemos do INSERT para o MySQL usar o padrão (NULL)
         if (isset($input['maintenance_start']) && empty($input['maintenance_start'])) {
             unset($input['maintenance_start']);
@@ -249,6 +272,29 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         if (isset($input['maintenance_end']) && empty($input['maintenance_end'])) {
             unset($input['maintenance_end']);
         }
+
+        // Garantir valores booleanos inteiros para campos tinyint
+        $input['is_active']      = !empty($input['is_active']) ? 1 : 0;
+        $input['is_noc']         = !empty($input['is_noc']) ? 1 : 0;
+        $input['is_maintenance'] = !empty($input['is_maintenance']) ? 1 : 0;
+
+        // Garantir valores corretos para campos de relacionamento
+        if (empty($input['itemtype']) || $input['itemtype'] === '0') {
+            $input['itemtype'] = null;
+        }
+        if (empty($input['items_id']) || !is_numeric($input['items_id'])) {
+            $input['items_id'] = 0;
+        }
+        if (empty($input['groups_id_tech']) || !is_numeric($input['groups_id_tech'])) {
+            $input['groups_id_tech'] = 0;
+        }
+
+        $input['auto_create_ticket'] = !empty($input['auto_create_ticket']) ? 1 : 0;
+
+        if (empty($input['itilcategories_id']) || !is_numeric($input['itilcategories_id'])) {
+            $input['itilcategories_id'] = 0;
+        }
+
         return $input;
     }
 
@@ -261,91 +307,14 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
      * Método chamado pela Ação Automática do GLPI
      */
     static function cronCheckUptime($task) {
-        global $DB;
-        $inst = new self();
-
-        // Busca monitores ativos que não estão em manutenção
-        $iterator = $DB->request([
-            'FROM'  => 'glpi_plugin_uptimemonitor_monitors',
-            'WHERE' => [
-                'is_active' => 1,
-                '_OR' => [
-                    ['is_maintenance' => 0],
-                    ['maintenance_end' => ['<', date('Y-m-d H:i:s')]]
-                ]
-            ]
-        ]);
-
-        $count = 0;
-        foreach ($iterator as $row) {
-
-            // Dentro do foreach do cronCheckUptime em monitor.class.php
-            $old_status = $row['last_status'];
-            $new_status = self::testTarget($row['type'], $row['url']);
-
-            if ($old_status !== $new_status) {
-                // Se o status mudou para DOWN, dispara o evento
-                if ($new_status === 'DOWN') {
-                    NotificationEvent::raiseEvent('status_down', $inst);
-                } 
-                // Se o status voltou para UP, dispara o evento de recuperação
-                elseif ($new_status === 'UP' && $old_status === 'DOWN') {
-                    NotificationEvent::raiseEvent('status_up', $inst);
-                }
-            }
-
-           // $new_status = self::testTarget($row['type'], $row['url']);
-            
-            // Atualiza o banco de dados
-            $DB->update('glpi_plugin_uptimemonitor_monitors', [
-                'last_status' => $new_status,
-                'last_check'  => date('Y-m-d H:i:s')
-            ], ['id' => $row['id']]);
-            
-            $count++;
-
-            
-        }
-
-        $task->addVolume($count); // Log de quantos foram verificados
-        return 1; // Sucesso
+        return PluginUptimemonitorCron::cronCheckUptime($task);
     }
 
     /**
      * Lógica de teste por tipo
      */
     static function testTarget($type, $url) {
-        switch ($type) {
-            case 'http':
-                $ch = curl_init($url);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                curl_exec($ch);
-                $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
-                return ($code >= 200 && $code < 400) ? 'UP' : 'DOWN';
-
-            case 'ping':
-                $host = parse_url($url, PHP_URL_HOST) ?: $url;
-                //$exec = stristr(PHP_OS, 'WIN') ? "ping -n 1 -w 1000 $host" : "ping -c 1 -W 1 $host";
-                $exec = stristr(PHP_OS, 'WIN') ? "ping -n 1 -w 1000 " . escapeshellarg($host) : "LC_ALL=C /bin/ping -c 1 -W 3 " . escapeshellarg($host);
-                exec($exec, $output, $result);
-                return ($result === 0) ? 'UP' : 'DOWN';
- 
-               case 'port':
-                // Espera formato IP:PORTA
-                $parts = explode(':', $url);
-                $ip = $parts[0];
-                $port = $parts[1] ?? 80;
-                $connection = @fsockopen($ip, $port, $errno, $errstr, 5);
-                if (is_resource($connection)) {
-                    fclose($connection);
-                    return 'UP';
-                }
-                return 'DOWN';
-        }
-        return 'DOWN';
+        return PluginUptimemonitorCron::testTarget($type, $url);
     }
 
     // Dentro da classe PluginUptimemonitorMonitor
@@ -532,171 +501,16 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
      * Informações da Ação Automática para aparecer no painel do GLPI
      */
     static function cronInfo($name) {
-        switch ($name) {
-            case 'check':
-                return [
-                    'description' => __('Verifica o status dos sites/servidores', 'uptimemonitor'),
-                    'parameter'   => __('Lote', 'uptimemonitor') // Opcional
-                ];
-        }
-        return [];
+        return PluginUptimemonitorCron::cronInfo($name);
     }
 
     /**
      * A função que realmente executa o teste e consolida Timer, Notificações e Logs
      */
     static function cronCheck($task) {
-        global $DB;
-        
-        $inst = new self(); 
-
-        // 1. Busca monitores ativos que NÃO estão em janela de manutenção
-        
-        $date_hora_atual = date('Y-m-d H:i:s');
-        $monitors = $DB->request([
-            'FROM'  => 'glpi_plugin_uptimemonitor_monitors',
-            'WHERE' => ['is_active' => 1]
-        ]);
-                
-        $total_processados = 0;
-        $agora = time();
-
-        // CORREÇÃO DOS TEMPOS: High (Alta) deve ser o mais rápido, Low (Baixa) o mais demorado
-        $frequencias = [
-            'test'   => 30,  // 30 segundos - Para testes rápidos
-            'high'   => 60,  // 1 minuto - Alta (Produção / Missão Crítica)
-            'medium' => 300, // 5 minutos - Média (Serviços Internos)
-            'low'    => 900  // 15 minutos - Baixa (Ambientes de Teste/Dev)            
-        ];
-
-        foreach ($monitors as $monitor) {
-            $id = $monitor['id'];
-            $url = $monitor['url'];
-            $type = $monitor['type'];
-
-            // Verifica se o monitor está em janela de manutenção (caso a manutenção seja programada, mas o campo is_maintenance ainda esteja 0)
-            if ($monitor['is_maintenance'] == 1) {
-                // Tem data de fim e ela já passou?
-                if (!empty($monitor['maintenance_end']) && strtotime($monitor['maintenance_end']) <= $agora) {
-                    
-                    // 1. Tira do modo de manutenção no Banco de Dados
-                    $DB->update('glpi_plugin_uptimemonitor_monitors', [
-                        'is_maintenance' => 0,
-                        'maintenance_start' => 'NULL',
-                        'maintenance_end' => 'NULL'
-                    ], ['id' => $id]);
-                    
-                    // 2. Atualiza a variável local para o teste rodar agora
-                    $monitor['is_maintenance'] = 0;
-                    
-                    // 3. (Opcional) Enviar Telegram avisando que a manutenção acabou
-                    $host_name = $monitor['name'] ?: $url;
-                    $msg = "🔧 <b>Aviso de Manutenção</b>\n";
-                    $msg .= "O período de manutenção de <b>{$host_name}</b> foi concluído.\nO monitoramento foi reativado.";
-                    self::sendTelegramNotification($msg);
-                    
-                } else {
-                    // A manutenção ainda está válida!
-
-                    // Verifica a frequência antes de logar para não inundar o banco
-                    $criticality = !empty($monitor['criticality']) ? strtolower($monitor['criticality']) : 'medium';
-                    $ultimo_check = !empty($monitor['last_check']) ? strtotime($monitor['last_check']) : 0;
-                    $intervalo_necessario = isset($frequencias[$criticality]) ? $frequencias[$criticality] : 300;
-
-                    if (($agora - $ultimo_check) >= $intervalo_necessario) {
-                        
-                        // Atualiza a data do último check no monitor
-                        $DB->update('glpi_plugin_uptimemonitor_monitors', [
-                            'last_check'  => date('Y-m-d H:i:s')
-                        ], ['id' => $id]);
-
-                        // Grava o log de manutenção com tempo de resposta zerado
-                        $DB->insert('glpi_plugin_uptimemonitor_logs', [
-                            'plugin_uptimemonitor_monitors_id' => $id,
-                            'status'           => 'MAINT',
-                            'response_time_ms' => 0,
-                            'date_creation'    => date('Y-m-d H:i:s')
-                        ]);
-                        
-                        $total_processados++;
-                    }
-
-                    // Pula o teste real de rede (Ping/HTTP) para não gerar alertas falsos
-                    continue; 
-                }
-            }
-            // Sanitiza a criticidade (garante que seja minúsculo para bater com o array)
-            // Se estiver vazio, assume 'medium' como padrão de segurança
-            $criticality = !empty($monitor['criticality']) ? strtolower($monitor['criticality']) : 'medium';  
-            $old_status = $monitor['last_status'];
-            
-            // 2. VERIFICAÇÃO DE FREQUÊNCIA (NOVIDADE AQUI)
-            // Pega a data do último check. Se for nulo/vazio, assume 0 para testar imediatamente
-            $ultimo_check = !empty($monitor['last_check']) ? strtotime($monitor['last_check']) : 0;
-            $intervalo_necessario = isset($frequencias[$criticality]) ? $frequencias[$criticality] : 300;
-
-            // Se ainda não passou o tempo necessário, pula para o próximo host do foreach
-            if (($agora - $ultimo_check) < $intervalo_necessario) {
-                continue; 
-            }
-
-            // 3. INICIA O CRONÓMETRO ANTES DO TESTE
-            $start_time = microtime(true);
-            
-            // 4. EXECUTA O TESTE DINÂMICO
-            $new_status = self::testTarget($type, $url);
-            
-            // 5. PARA O CRONÓMETRO E CALCULA
-            $end_time = microtime(true);
-            $response_time = round(($end_time - $start_time) * 1000); 
-            
-            if ($new_status === 'DOWN') {
-                $response_time = 0; 
-            }
-
-            // 6. DISPARA NOTIFICAÇÕES SE O STATUS MUDAR
-            if ($old_status !== $new_status) {
-                if ($inst->getFromDB($id)) {
-                    if ($new_status === 'DOWN') {
-                        NotificationEvent::raiseEvent('status_down', $inst);
-                        
-                        // Telegram Notification (NOVIDADE)
-                        $host_name = $monitor['name'] ?: $monitor['url'];
-                        $msg = "🚨 <b>Monitor de Uptime</b>\n";
-                        $msg .= "O servidor <b>{$host_name}</b> está OFFLINE!\n";
-                        $msg .= "Verificado em: " . date('d/m/Y H:i:s');
-
-                        self::sendTelegramNotification($msg);
-
-                    } elseif ($new_status === 'UP' && $old_status === 'DOWN') {
-                        NotificationEvent::raiseEvent('status_up', $inst);
-                    }
-                }
-            }
-            
-            // 7. ATUALIZA O STATUS NO MONITOR PRINCIPAL
-            $DB->update('glpi_plugin_uptimemonitor_monitors', [
-                'last_status' => $new_status,
-                'last_check'  => date('Y-m-d H:i:s')
-            ], [
-                'id' => $id
-            ]);
-
-            // 8. GRAVA O LOG NO HISTÓRICO
-            $DB->insert('glpi_plugin_uptimemonitor_logs', [
-                'plugin_uptimemonitor_monitors_id' => $id,
-                'status'           => $new_status,
-                'response_time_ms' => $response_time,
-                'date_creation'    => date('Y-m-d H:i:s')
-            ]);
-
-            $total_processados++;
-        }
-
-        $task->setVolume($total_processados);
-        return ($total_processados > 0) ? 1 : 0;
+        return PluginUptimemonitorCron::cronCheck($task);
     }
-    
+
     // Retorna a URL do formulário de criação/edição
     static function getFormURL($full = true) {
         return Toolbox::getItemTypeFormURL(__CLASS__, $full);
@@ -708,7 +522,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
     }
     
     /**
-     * Define o conteúdo do menu no GLPI 10 (Substitui a necessidade do Superasset)
+     * Define o conteúdo do menu no GLPI 10
      */
     static function getMenuContent() {
         $menu = [
@@ -733,7 +547,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
      * Conteúdo do menu personalizado para as páginas do plugin (Adicionar, Dashboard, TV, NOC, Report)
      */
     static function getMenuContentPluginCustom() {
-        echo "<div btn-group flex-wrap mb-3'>";
+        echo "<div class='btn-group flex-wrap mb-3'>";
         echo "<span class='btn bg-blue-lt pe-none' aria-disabled='true'>Ações</span>";
         echo "  <a href='monitor.form.php' class='btn btn-outline-secondary'>";
         echo "      <i class='fas fa-plus fa-lg me-2'></i> " . __("Adicionar", "uptimemonitor");
@@ -750,39 +564,16 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "  <a href='report.php' class='btn btn-outline-secondary'>";
         echo "      <i class='fas fa-chart-line fa-lg me-2'></i> " . __("Report SLA", "uptimemonitor");
         echo "  </a>";
+        // Verifica se o usuário tem direitos 
+        if (Session::haveRight('uptimemonitor', READ)) {
+            echo "  <a href='config.form.php' class='btn btn-outline-warning'>";
+            echo "      <i class='fas fa-cogs fa-lg me-2'></i> " . __("Configurações", "uptimemonitor");
+            echo "  </a>";
+        }
         echo "  <a href='#' class='btn btn-outline-secondary' onclick='window.print();'>";
         echo "      <i class='fas fa-print fa-lg me-2'></i> " . __("Imprimir", "uptimemonitor");
         echo "  </a>";                    
         echo "</div>";
     }
 
-    /**
-    * Envia notificação via Telegram
-    * @param string $message Mensagem a ser enviada
-    */
-    public static function sendTelegramNotification($message) {
-        // Recomendo salvar essas configs em uma tabela de configuração ou constante
-        $botToken = "8681061435:AAFDezvJSgkfpTnTgahG13FyLInoXllyt2k";
-        $chatId   = "8600007386";
-
-        $url = "https://api.telegram.org/bot$botToken/sendMessage";
-
-        $data = [
-            'chat_id'    => $chatId,
-            'text'       => $message,
-            'parse_mode' => 'HTML' // Permite usar <b>, <i>, etc.
-        ];
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-        $result = curl_exec($ch);
-        curl_close($ch);
-
-        return $result;
-    }
 }

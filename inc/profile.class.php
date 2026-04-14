@@ -1,4 +1,11 @@
 <?php
+/**
+ * Uptime Monitor Plugin for GLPI
+ * Author: Thiago Passamani
+ * @class PluginUptimemonitorProfile
+ * @description Classe de Perfil do Plugin Uptime Monitor. Gerencia as permissões de acesso ao plugin para cada perfil de usuário.
+ */
+
 class PluginUptimemonitorProfile extends CommonDBTM {
 
    function getTabNameForItem(CommonGLPI $item, $withtemplate = 0) {
