@@ -329,6 +329,11 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
     if ($item->getType() == __CLASS__) {
         return [
             'stats' => __('Estatísticas', 'uptimemonitor'),
+            'tickets' => __('Tickets Relacionados', 'uptimemonitor')
+        ];
+    } else {
+        return [
+            'stats' => __('Estatísticas', 'uptimemonitor')
         ];
     }
     return '';
@@ -336,6 +341,10 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
 
     static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0) {
       if ($tabnum == 'stats') {
+           self::showStats($item);
+      } elseif ($tabnum == 'tickets') {
+           self::showTickets($item);
+      } else {
            self::showStats($item);
       }
       return true;
@@ -491,6 +500,68 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</div>";
         // Renderiza o controle de paginação (RODAPÉ)
         Html::printAjaxPager(__('Histórico de Disponibilidade', 'uptimemonitor'), $start, $total_number);
+    }
+
+    // Exibe os tickets relacionados (baseado no nome do monitor)
+    static function showTickets($item) {
+        
+        global $DB; 
+        
+        $start = (isset($_REQUEST['start']) ? intval($_REQUEST['start']) : 0);
+        $limit = $_SESSION['glpilist_limit'] ?? 50; // Usa o limite padrão do usuário no GLPI
+
+        $total_number = countElementsInTable(
+            'glpi_tickets', 
+            ['name' => ['LIKE', '%' . $item->getName() . '%'], 'is_deleted' => 0]
+        );
+
+        // Busca os últimos 50 logs
+        $iterator = $DB->request([
+            'FROM'      => 'glpi_tickets',
+            'WHERE'     =>  ['name' => ['LIKE', '%' . $item->getName() . '%'], 'is_deleted' => 0],
+            'START'     => $start,
+            'LIMIT'     => $limit,
+            'ORDER'     => 'id DESC'
+        ]);
+
+        echo "<h3>" . __('Tickets Relacionados', 'uptimemonitor') . "</h3>";
+        if (empty($iterator)) {
+            echo "<div class='center shadow' style='padding:20px; background-color: #fff; border-radius: 4px;'>";
+            echo "<i class='fas fa-exclamation-triangle' style='font-size:30px; color:orange;'></i>";
+            echo "<h4>Ainda não existem tickets relacionados para este monitor.</h4>";
+            echo "</div>";
+            return;
+        }
+        
+        $tickets_array = [];
+        foreach ($iterator as $ticket) {
+            $tickets_array[] = $ticket;
+        }
+        echo "<div class='center' style='width: 95%; margin: 20px auto;'>";
+        echo "<table class='tab_cadre_fixehov'>"; // Classe padrão do GLPI para tabelas
+        echo "<tr class='tab_bg_2'>";
+        echo "<th>" . __('ID', 'uptimemonitor') . "</th>";
+        echo "<th>" . __('Título', 'uptimemonitor') . "</th>";
+        echo "<th>" . __('Status', 'uptimemonitor') . "</th>";
+        echo "<th>" . __('Criado em', 'uptimemonitor') . "</th>";
+        echo "<th>" . __('Fechado em', 'uptimemonitor') . "</th>";
+        echo "</tr>";
+
+        // Faz o loop para imprimir as linhas da tabela
+        foreach ($tickets_array as $ticket) {         
+            echo "<tr class='tab_bg_1'>";
+            echo "<td><a href='" . Toolbox::getItemTypeFormURL('Ticket') . "?id=" . $ticket['id'] . "'>" . $ticket['id'] . "</a></td>";
+            echo "<td>" . $ticket['name'] . "</td>";
+            echo "<td>" . $ticket['status'] . "</td>"; // Adicionar nome do status
+            echo "<td>" . Html::convDateTime($ticket['date_creation']) . "</td>";
+            echo "<td>" . Html::convDateTime($ticket['solvedate']) . "</td>";
+            echo "</tr>";
+        }
+        
+        echo "</table>";
+        echo "</div>";
+        // Renderiza o controle de paginação (RODAPÉ)
+        Html::printAjaxPager(__('Tickets Relacionados', 'uptimemonitor'), $start, $total_number);        
     }
 
     static function getTargets() {
