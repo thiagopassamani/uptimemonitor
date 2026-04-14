@@ -4,6 +4,8 @@ include ("../../../inc/includes.php");
 // 1. Segurança e Cabeçalho
 Session::checkLoginUser();
 
+Session::checkRight('uptimemonitor', READ);
+
 Html::header(
     PluginUptimemonitorMonitor::getTypeName(Session::getPluralNumber()),
     $_SERVER['PHP_SELF'], 

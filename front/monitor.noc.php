@@ -1,4 +1,3 @@
-
 <?php
 // Carrega o motor do GLPI (o caminho assume que o arquivo está na pasta /front/)
 include ("../../../inc/includes.php");
@@ -10,9 +9,7 @@ Session::checkLoginUser();
 if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
     global $DB;
     $monitors = [];
-
     //$date_limit = date("Y-m-d H:i:s", strtotime("-24 hours"));
-
     $iterator = $DB->request([
         'SELECT' => [
             'm.id', 
@@ -22,11 +19,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             'm.last_status', 
             'm.is_maintenance',
             new \QueryExpression('COUNT(l.id) AS total_logs'),
-            new \QueryExpression("SUM(CASE WHEN l.status != 'MAINT' OR l.status IS NULL THEN 1 ELSE 0 END) AS maint_count"),
+            new \QueryExpression("SUM(CASE WHEN l.status = 'MAINT' THEN 1 ELSE 0 END) AS maint_count"),
             new \QueryExpression('SUM(CASE WHEN l.status = "UP" THEN 1 ELSE 0 END) AS up_count')
-
-            //new \QueryExpression("COUNT(CASE WHEN l.date > ". $date_limit ." THEN l.id ELSE NULL END) AS total_logs"),
-            //new \QueryExpression("SUM(CASE WHEN l.status = 'UP' AND l.date > " . $date_limit ." THEN 1 ELSE 0 END) AS up_count")
         ],
         'FROM'      => 'glpi_plugin_uptimemonitor_monitors AS m',
         'LEFT JOIN' => [
@@ -65,11 +59,27 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
         // Garantir que os valores sejam numéricos para o cálculo
         $total = (int)$row['total_logs'];
         $up    = (int)$row['up_count'];
+        $maint = (int)$row['maint_count'];
+        
+        $totalEfetivo = $total - $maint;
 
-        $row['uptime_percent'] = ($total > 0) 
-            ? round(($up / $total) * 100, 2) 
-            : 100; // Se não houver logs nas últimas 24h, exibe 100% ou "-" conforme sua preferência
-            
+        $row['uptime_percent'] = ($totalEfetivo > 0) ? round(($up / $totalEfetivo) * 100, 2) : 100; // Se não houver logs nas últimas 24h, exibe 100% ou "-" conforme sua preferência
+        
+        $historyIterator = $DB->request([
+            'SELECT' => ['response_time_ms'],
+            'FROM'   => 'glpi_plugin_uptimemonitor_logs',
+            'WHERE'  => ['plugin_uptimemonitor_monitors_id' => $row['id']],
+            'ORDER'  => 'date_creation DESC',
+            'LIMIT'  => 20
+        ]);
+
+        $latencyHistory = [];
+        foreach ($historyIterator as $log) {
+            $latencyHistory[] = (int)$log['response_time_ms'];
+        }
+        
+        $row['history'] = array_reverse($latencyHistory);
+
         $monitors[] = $row;
     }
 
@@ -96,8 +106,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow-x: hidden;
         }
-        
-        /* Cabeçalho Limpo */
         .header {
             display: flex;
             justify-content: space-between;
@@ -117,11 +125,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             color: #aaa;
             letter-spacing: 2px;
         }
-
         /* Grid Responsiva dos Monitores */
         .grid-container {
             display: grid;
-            /* Na TV, os blocos se ajustarão sozinhos. Minimo de 280px por bloco */
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 20px;
         }
@@ -148,31 +154,48 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             animation: pulse-red 2s infinite; /* Faz piscar suavemente se estiver fora */
         }
         .card.status-maintenance {
-            border-top-color: #f39c12; /* Laranja */
-            background-color: rgba(243, 156, 18, 0.1);
-            opacity: 0.7;
+            border-top-color: #f39c12; 
+            background-color: rgba(243, 156, 18, 0.15); /* Um pouco mais vibrante */
+            opacity: 0.9; /* Menos transparente para facilitar a leitura na TV */
         }
-
+        
         /* Tipografia dos Cards */
-        .card-title {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .card-icon {
-            font-size: 45px;
-            margin: 15px 0;
-        }
+
         .card.status-up .card-icon { color: #2ecc71; }
         .card.status-down .card-icon { color: #e74c3c; }
         .card.status-maintenance .card-icon { color: #f39c12; }
-        
-        .status-text { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
-        .card-url { font-size: 13px; color: #777; margin-top: 15px; word-break: break-all; }
+        .card-title { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card-icon { font-size: 2.5em; margin: 15px 0; }
+        .status-text { font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
+        .sla-text { font-size: 0.75em; color: #888; }
+        .card-url { font-size: 0.75em; color: #666; margin-top: 10px; word-break: break-all; }
 
+        /* Sparkline Container */
+        .sparkline-container {
+            margin: 15px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 45px;
+        }
+        .latency-label { font-size: 0.7em; color: #888; margin-top: 4px; }
+        .sparkline {
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
+          
+        }
+        .sparktext {
+            font-size: 0.75em;
+            color: #888;
+            margin-top: 5px;
+        }
+        polyline {
+         
+            transition: all 0.5s ease; 
+        }
         /* Barra de Progresso no Topo */
         #progress-bar-container {
             position: fixed;
@@ -243,7 +266,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
         </button>
         <div class="clock" id="clock">00:00:00</div>
     </div>
-    <!-- <div class="clock" id="clock">00:00:00</div>-->
 </div>
 
 <div class="grid-container" id="monitor-grid">
@@ -259,7 +281,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
     }
     setInterval(updateClock, 1000);
     updateClock();
-
+    
+    // Variáveis globais
+    let lastDownMonitors = new Set();
     let soundEnabled = false; // Começa mudo por exigência dos navegadores
     
     function toggleMute() {
@@ -286,6 +310,46 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
         }
     }
 
+    function generateSparkline(data, statusClass) {
+        const width = 160;
+        const height = 30;
+        
+        // Verificação de dados para evitar erros de cálculo
+        if (!data || data.length < 2) {
+            console.warn("Dados insuficientes para o gráfico:", data);
+            return '';
+        }
+    
+        const max = Math.max(...data) || 1;
+        const min = Math.min(...data) || 0;
+        const range = max - min || 1;
+    
+        // Mapeia os pontos para as coordenadas do SVG
+        const points = data.map((val, i) => {
+            const x = (i / (data.length - 1)) * width;
+            const y = height - ((val - min) / range) * height;
+            return `${x},${y}`;
+        }).join(' ');
+        
+        let strokeColor = '#3498db';
+        if (statusClass === 'status-up') strokeColor = '#2ecc71';
+        if (statusClass === 'status-down') strokeColor = '#e74c3c';
+        if (statusClass === 'status-maintenance') strokeColor = '#f39c12';
+    
+        return `
+            <svg width="${width}" height="${height}" style="overflow: visible; margin-top: 5px;">
+                <polyline
+                    fill="none"
+                    stroke="${strokeColor}"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    points="${points}"
+                />
+            </svg>
+        `;
+    }
+    
     // Função matemática que cria o "Beep"
     function playAlertSound(frequency = 600, duration = 0.5) {
         if (!soundEnabled) return; // Se não clicou na página ainda, não tenta tocar para não gerar erro no console
@@ -329,6 +393,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                 const grid = document.getElementById('monitor-grid');
 
                 let hasCriticalAlert = false; // Inicialize a variável para verificar se há algum monitor DOWN
+                let currentDownMonitors = new Set(); // Conjunto para os monitores que estão DOWN nesta verificação
                 
                 if (data.length === 0) {
                     grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center;">Nenhum monitor ativo encontrado no banco.</div>';
@@ -336,10 +401,18 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                 }
 
                 grid.innerHTML = ''; 
+
                 data.forEach(monitor => {
                     let cardClass = '';
                     let icon = 'fa-server';
                     let statusText = 'DESCONHECIDO';
+                    
+                    // Converter strings do banco para números para evitar erros de cálculo
+                    const totalLogs = parseInt(monitor.total_logs) || 0;
+                    const upCount = parseInt(monitor.up_count) || 0;
+                    const maintCount = parseInt(monitor.maint_count) || 0;
+                    const lastStatus = monitor.last_status;
+                    const isMaintFlag = parseInt(monitor.is_maintenance) === 1;
 
                     // Ajuste de ícones por tipo
                     const type = monitor.type ? monitor.type.toLowerCase() : '';
@@ -348,33 +421,59 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                     if (type.includes('port')) icon = 'fa-door-open';
 
                     // Lógica de Status (Verifique se esses nomes de colunas existem na sua tabela)
-                    if (monitor.is_maintenance == 1) {
+                    // Prioridade 1: Flag de manutenção ou último status ser MAINT
+                    if (isMaintFlag || lastStatus === 'MAINT') {
                         cardClass = 'status-maintenance';
                         icon = 'fa-tools';
                         statusText = 'MANUTENÇÃO';
-                    } else if (monitor.last_status === 'UP') {
+                    } 
+                    // Prioridade 2: Status Online
+                    else if (lastStatus === 'UP') {
                         cardClass = 'status-up';
                         statusText = 'ONLINE';
-                    } else if (monitor.last_status === 'DOWN') {
+                    } 
+                    // Prioridade 3: Status Offline
+                    else if (lastStatus === 'DOWN') {
                         cardClass = 'status-down';
                         icon = 'fa-exclamation-triangle';
                         statusText = 'OFFLINE';
                         hasCriticalAlert = true;
-                        
+                        //currentDownMonitors.add(monitor.id); // Adiciona o monitor atual ao conjunto de DOWN
+                        // SÓ FALA se o monitor não estava em DOWN na última verificação
+                        //if (soundEnabled && !lastDownMonitors.has(monitor.id)) {
+                        if(soundEnabled) {
+                            const msg = new SpeechSynthesisUtterance("Atenção, " + monitor.name + " está fora do ar");
+                            msg.lang = 'pt-BR';
+                            window.speechSynthesis.speak(msg);
+                        }
                     }
+
+                    // Calcular o SLA apenas considerando os logs efetivos (sem manutenção)
+                    const totalEfetivo = totalLogs - maintCount;
+                    let slaDisplay = (totalEfetivo > 0) ? ((upCount / totalEfetivo) * 100).toFixed(2) + '%' : '100.00%';
+
+                    const sparklineSVG = generateSparkline(monitor.history, cardClass);
+                    const lastLatency = monitor.history.length > 0 ? monitor.history[monitor.history.length - 1] : 0;
 
                     const cardHTML = `
                         <div class="card ${cardClass}">
                             <div class="card-title">${monitor.name}</div>
+                            <div class="card-url">${monitor.url || ''}</div>
                             <div class="card-icon"><i class="fas ${icon}"></i></div>
                             <div class="status-text">${statusText}</div>
-                            <div class="sla-text">SLA: ${monitor.total_logs > 0 ? ((monitor.up_count / monitor.total_logs) * 100).toFixed(2) + '%' : 'N/A'}</div>
-                            <div class="card-url">${monitor.url || ''}</div>
+                            <div class="sparkline-container">
+                                <div class="sparkline">${sparklineSVG}</div>
+                                <div class="sparktext">Latência: ${lastLatency}ms</div>
+                            </div>                                                      
+                            <div class="sla-text">SLA: ${slaDisplay || 'N/A'}</div>                            
                         </div>
                     `;
                     grid.innerHTML += cardHTML;
                 });
-                if (hasCriticalAlert) {
+
+                lastDownMonitors = currentDownMonitors;
+
+                if (hasCriticalAlert && soundEnabled) {
                     // Toca o alarme (frequência mais alta, 800Hz) a cada ciclo que algo estiver OFF
                     playAlertSound(800, 0.4);
                 }
@@ -412,9 +511,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
     // Inicia o loop da barra de progresso
     setInterval(updateProgressBar, 100);
 
-    //fetchMonitors();
-    //setInterval(fetchMonitors, 15000);
-    
 </script>
 </body>
 </html>

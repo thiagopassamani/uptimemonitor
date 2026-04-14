@@ -1,27 +1,69 @@
 <?php
+/**
+ * Uptime Monitor Plugin for GLPI
+ * Author: Thiago Passamani
+ * @class PluginUptimemonitorMonitorForm
+ * @description Formulário do Monitor do Plugin Uptime Monitor
+ */
+
 include ("../../../inc/includes.php");
+
+// Verifica se o usuário está logado
 Session::checkLoginUser();
 
-Session::checkRight('uptimemonitor', READ);
+// Verifica se o usuário tem direitos básicos (ticket) ou é super-admin
+if (!Session::haveRight('uptimemonitor', READ) && !Session::isSuperAdmin()) {
+    Html::displayRightError();
+    exit;
+}
 
 $monitor = new PluginUptimemonitorMonitor();
 
 // Se for uma edição (ID > 0), tenta carregar o item
-if (isset($_GET["id"]) && $_GET["id"] > 0) {
-   if (!$monitor->getFromDB($_GET["id"])) {
-      Html::displayNotFoundError(); // Se o ID não existir no banco
+$id = isset($_GET["id"]) ? (int) $_GET["id"] : -1;
+if ($id > 0) {
+   if (!$monitor->getFromDB($id)) {
+         Html::displayNotFoundError(); // Se o ID não existir no banco
    }
 }
 
 if (isset($_POST["add"])) {
-   $monitor->add($_POST);
-   Html::redirect("monitor.php");
-} else if (isset($_POST["update"])) {
-   $monitor->update($_POST);
+   try {
+      $monitor->check(-1, CREATE, $_POST);
+      $newId = $monitor->add($_POST);
+      if ($newId !== false) {
+         Html::redirect("monitor.php");
+      }
+      Session::addMessage(__('Falha ao criar monitor. Verifique os campos e tente novamente.', 'uptimemonitor'), false, ERROR);
+   } catch (Exception $e) {
+      Session::addMessageAfterRedirect($e->getMessage(), false, ERROR);
+   }
    Html::back();
+} else if (isset($_POST["update"])) {
+   try {
+      $monitor->check($_POST['id'], UPDATE, $_POST);
+      $monitor->update($_POST);
+      Html::redirect("monitor.php");
+   } catch (Exception $e) {
+      Session::addMessageAfterRedirect($e->getMessage(), false, ERROR);
+      Html::back();
+   }
 } else if (isset($_POST["purge"])) {
-   $monitor->delete($_POST, 1);
-   Html::redirect("monitor.php");
+   try {
+      $monitor->check($_POST['id'], PURGE, $_POST);
+      $result = $monitor->delete($_POST, 1);
+      if ($result !== false) {
+         Html::redirect("monitor.php");
+      }
+      Session::addMessageAfterRedirect(
+         __('Falha ao excluir monitor. Tente novamente.', 'uptimemonitor'),
+         false,
+         ERROR
+      );
+   } catch (Exception $e) {
+      Session::addMessageAfterRedirect($e->getMessage(), false, ERROR);
+   }
+   Html::back();
 }
 
 Html::header(
@@ -31,6 +73,5 @@ Html::header(
     "PluginUptimemonitorMonitor"
 );
 
-$id = $_GET["id"] ?? -1;
 $monitor->display(['id' => $id]);
 Html::footer();

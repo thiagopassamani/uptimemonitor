@@ -4,7 +4,8 @@ include ("../../../inc/includes.php");
 
 Session::checkLoginUser();
 
-Session::checkRight('ticket', READ);
+//Session::checkRight('ticket', READ);
+Session::checkRight('uptimemonitor', READ);
 
 Html::header(
     __('Dashboard - Uptime Monitor', 'uptimemonitor'), 
