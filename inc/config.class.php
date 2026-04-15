@@ -238,12 +238,49 @@ class PluginUptimemonitorConfig extends CommonDBTM {
     }
 
     /**
+     * Generate notification message based on event type
+     */
+    public static function notificationMessage($message, $host_name) {
+        
+        $formatted_message = "";
+        
+        switch($message) {
+            case 'service_down':
+                $formatted_message = "🚨 *Monitor de Uptime*\n";
+                $formatted_message .= "ALERTA DE QUEDA";
+                $formatted_message .= "O serviço *" . $host_name . "* está OFFLINE.\n";
+                $formatted_message .= "Verificado em: " . date('d/m/Y H:i:s');
+                break;
+            case 'service_up':
+                $formatted_message = "✅ *Monitor de Uptime*\n";
+                $formatted_message .= "O serviço *" . $host_name . "* está ONLINE.\n";
+                $formatted_message .= "Serviço restabelecido automaticamente pelo Monitor de Uptime.\n";
+                $formatted_message .= "Verificado em: " . date('d/m/Y H:i:s');
+                break;
+            case 'service_maintenance_start':
+                $formatted_message = "🔧 *Aviso de Manutenção*\n";
+                $formatted_message .= "O serviço *" . $host_name . "* está em manutenção programada.\n";
+                break;
+            case 'service_maintenance_end':
+                $formatted_message = "🔧 *Aviso de Manutenção*\n";
+                $formatted_message .= "O período de manutenção de *" . $host_name . "* foi concluído.\nO monitoramento foi reativado.";
+                break;
+            default:
+                $formatted_message = $message;
+                break;
+        }
+        
+        // FIX: You MUST return the variable, otherwise the message is lost!
+        return $formatted_message;
+    }
+
+    /**
      * Send notification via Telegram
      * 
      * @param string $message Message to send
      * @return bool Success status
      */
-    public static function sendTelegramNotification($message) {
+    public static function sendTelegramNotification($message, $host_name) {
         if (self::getConfigValue('telegram_enabled') != '1') {
             return false;
         }
@@ -255,11 +292,13 @@ class PluginUptimemonitorConfig extends CommonDBTM {
             return false;
         }
 
+       $message = self::notificationMessage($message, $host_name);
+
         $url = "https://api.telegram.org/bot{$api_key}/sendMessage";
         $data = [
-            'chat_id' => $chat_id,
-            'text' => $message,
-            'parse_mode' => 'HTML'
+            'chat_id'       => $chat_id,
+            'text'          => $message,
+            'parse_mode'    => 'HTML'
         ];
 
         $options = [
@@ -284,7 +323,7 @@ class PluginUptimemonitorConfig extends CommonDBTM {
      * @param string $color Message color (good, warning, danger)
      * @return bool Success status
      */
-    public static function sendSlackNotification($message, $color = 'good') {
+    public static function sendSlackNotification($message, $host_name,$color = 'good') {
         if (self::getConfigValue('slack_enabled') != '1') {
             return false;
         }
@@ -294,6 +333,8 @@ class PluginUptimemonitorConfig extends CommonDBTM {
         if (empty($webhook_url)) {
             return false;
         }
+        
+        $message = self::notificationMessage($message, $host_name);
 
         $data = json_encode([
             'attachments' => [

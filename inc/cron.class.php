@@ -84,10 +84,8 @@ class PluginUptimemonitorCron {
 
                     // 3. (Opcional) Enviar Telegram avisando que a manutenção acabou
                     $host_name = $monitor['name'] ?: $url;
-                    $message = "🔧 <b>Aviso de Manutenção</b>\n";
-                    $message .= "O período de manutenção de <b>{$host_name}</b> foi concluído.\nO monitoramento foi reativado.";
-                    PluginUptimemonitorConfig::sendTelegramNotification($message);
-                    
+
+                    PluginUptimemonitorConfig::sendTelegramNotification('service_maintenance_end', $host_name);                    
 
                 } else {
                     // A manutenção ainda está válida!
@@ -149,6 +147,8 @@ class PluginUptimemonitorCron {
             }
 
             // 6. DISPARA NOTIFICAÇÕES SE O STATUS MUDAR
+            /* 15/04/2025 - Thiago Passamani - Ajuste na lógica de notificações para evitar alertas falsos e garantir que sejam enviados apenas quando houver mudança real de status, considerando também a janela de manutenção. */
+            /*
             if ($old_status !== $new_status) {
                 if ($inst->getFromDB($id)) {
                     if ($new_status === 'DOWN') {
@@ -159,10 +159,8 @@ class PluginUptimemonitorCron {
 
                         // Telegram Notification (NOVIDADE)
                         $host_name = $monitor['name'] ?: $monitor['url'];
-                        $message = "🚨 <b>Monitor de Uptime</b>\n";
-                        $message .= "O servidor <b>{$host_name}</b> está OFFLINE!\n";
-                        $message .= "Verificado em: " . date('d/m/Y H:i:s');
-                        PluginUptimemonitorConfig::sendTelegramNotification($message);
+
+                        PluginUptimemonitorConfig::sendTelegramNotification('service_down', $host_name);
                         PluginUptimemonitorConfig::sendSlackNotification($message, 'danger');
 
                     } elseif ($new_status === 'UP' && $old_status === 'DOWN') {
@@ -172,14 +170,71 @@ class PluginUptimemonitorCron {
 
                         // Telegram Notification (NOVIDADE)
                         $host_name = $monitor['name'] ?: $monitor['url'];
-                        $message = "✅ <b>Monitor de Uptime</b> <br> \n";
-                        $message .= "O serviço <b>{$host_name}</b> está ONLINE. <br>\n";
-                        $message .= "Serviço restabelecido automaticamente pelo Monitor de Uptime. <br>\n";
-                        $message .= "Verificado em: " . date('d/m/Y H:i:s');
-                        
-                        PluginUptimemonitorConfig::sendTelegramNotification($message);
+                                        
+                        PluginUptimemonitorConfig::sendTelegramNotification('service_up', $host_name);
                         PluginUptimemonitorConfig::sendSlackNotification($message, 'good');
                     }
+                }
+            }*/
+            // Define o número máximo de falhas antes de acionar o alerta. 
+            // No futuro, pode buscar este valor de PluginUptimemonitorConfig
+            $max_retries = 3; 
+                
+            // Recupera as tentativas atuais ou assume 0
+            $current_attempts = isset($monitor['failed_attempts']) ? (int)$monitor['failed_attempts'] : 0;
+            if ($new_status === 'DOWN') {
+                $current_attempts++;
+                // Grava a tentativa falhada na base de dados
+                $DB->update(
+                    'glpi_plugin_uptimemonitor_monitors',
+                    ['failed_attempts' => $current_attempts],
+                    ['id' => $monitor['id']]
+                );
+                // Apenas abre ticket e notifica SE atingiu o limite de retries 
+                // E se não estava já marcado como DOWN anteriormente (evita flood)
+                if ($current_attempts >= $max_retries && $old_status !== 'DOWN') {
+                    
+                    // Abre ticket automaticamente
+                    self::handleServiceDown($monitor);
+                    NotificationEvent::raiseEvent('status_down', $inst);
+                    // Telegram & Slack Notification
+                    $host_name = $monitor['name'] ?: $monitor['url'];
+                    PluginUptimemonitorConfig::sendTelegramNotification('service_down', $host_name);
+                    PluginUptimemonitorConfig::sendSlackNotification('service_down', $host_name, 'danger');
+                    
+                    // Força a atualização do status global para DOWN
+                    $DB->update(
+                        'glpi_plugin_uptimemonitor_monitors',
+                        ['status' => 'DOWN'],
+                        ['id' => $monitor['id']]
+                    );
+                }
+            } elseif ($new_status === 'UP') {
+                // Se o serviço respondeu com sucesso, limpamos imediatamente o contador de falhas
+                if ($current_attempts > 0) {
+                    $DB->update(
+                        'glpi_plugin_uptimemonitor_monitors',
+                        ['failed_attempts' => 0],
+                        ['id' => $monitor['id']]
+                    );
+                }
+                // Se estava DOWN e agora está UP, tratamos a recuperação
+                if ($old_status === 'DOWN') {
+                    // Fecha ticket automaticamente se existir
+                    self::handleServiceUp($monitor);
+                    NotificationEvent::raiseEvent('status_up', $inst);
+                    // Telegram & Slack Notification
+                    $host_name = $monitor['name'] ?: $monitor['url'];
+
+                    PluginUptimemonitorConfig::sendTelegramNotification('service_up', $host_name);
+                    PluginUptimemonitorConfig::sendSlackNotification('service_up', $host_name, 'good');
+
+                    // Força a atualização do status global para UP
+                    $DB->update(
+                        'glpi_plugin_uptimemonitor_monitors',
+                        ['status' => 'UP'],
+                        ['id' => $monitor['id']]
+                    );
                 }
             }
 
@@ -274,8 +329,6 @@ class PluginUptimemonitorCron {
     private static function handleServiceDown($monitor) {
         global $DB;
 
-        //$auto = !empty($monitor['auto_create_ticket']) ? $monitor['auto_create_ticket'] : PluginUptimemonitorConfig::getConfigValue('create_ticket_on_down', 0);
-
         // Verifica se o monitor tem configuração explícita (0 ou 1), se não tiver (null/não definido), usa a config global
         if (array_key_exists('auto_create_ticket', $monitor) && $monitor['auto_create_ticket'] !== null) {
             $auto = $monitor['auto_create_ticket'];
@@ -336,15 +389,9 @@ class PluginUptimemonitorCron {
      */
     private static function handleServiceUp($monitor) {
         global $DB;
+        
         if ($monitor['current_tickets_id'] > 0) {
-            $ticket_id = $monitor['current_tickets_id'];
-
-            $message = "✅ <b>Monitor de Uptime</b> <br> \n";
-            $message .= "O serviço <b>{$monitor['name']}</b> está ONLINE. <br>\n";
-            $message .= "Serviço restabelecido automaticamente pelo Monitor de Uptime. <br>\n";
-            $message .= "Verificado em: " . date('d/m/Y H:i:s');
-            PluginUptimemonitorConfig::sendTelegramNotification($message);
-            PluginUptimemonitorConfig::sendSlackNotification($message, 'good');
+            $ticket_id = $monitor['current_tickets_id'];;
 
             // Adiciona Solução
             $sol = new ITILSolution();
@@ -365,16 +412,10 @@ class PluginUptimemonitorCron {
                 ['id' => $monitor['id']]
             );
         }
-        /*
-        else {
-            // Mesmo que não haja ticket para fechar, podemos enviar uma notificação de recuperação
-            $message = "✅ <b>Monitor de Uptime</b> <br> \n";
-            $message .= "O serviço <b>{$monitor['name']}</b> está ONLINE. <br>\n";
-            $message .= "Serviço restabelecido automaticamente pelo Monitor de Uptime. <br>\n";
-            $message .= "Verificado em: " . date('d/m/Y H:i:s');
-            PluginUptimemonitorConfig::sendTelegramNotification($message);
-            PluginUptimemonitorConfig::sendSlackNotification($message, 'good');
-        }
-        */
+
+        $host_name = $monitor['name'] ?: $monitor['url'];
+        
+        PluginUptimemonitorConfig::sendTelegramNotification('service_up', $host_name);
+        PluginUptimemonitorConfig::sendSlackNotification($message, 'good');
     }
 }
