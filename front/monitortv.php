@@ -106,8 +106,8 @@ foreach ($res as $row) {
     
     // Se houver um chamado aberto, mostra o ID
     if ($row['current_tickets_id'] > 0) {
-        echo "<div style='margin-top:10px; padding:5px; background:#fff; border:1px solid #e74c3c; border-radius:4px; font-size:0.8rem; color:#e74c3c; font-weight:bold;'>
-                <i class='fas fa-ticket-alt'></i> Chamado #".$row['current_tickets_id']."
+        echo "<div style='margin-top:10px; padding:5px; background:#fff; border:1px solid #e74c3c; border-radius:4px; font-size:0.7rem; color:#e74c3c; font-weight:bold;'>
+                <i class='fas fa-ticket-alt'></i> <a href='../../../front/ticket.form.php?id=".$row['current_tickets_id']."' target='_blank'>Ch. #".$row['current_tickets_id']."</a>
               </div>";
     }
 

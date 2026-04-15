@@ -455,6 +455,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                     const sparklineSVG = generateSparkline(monitor.history, cardClass);
                     const lastLatency = monitor.history.length > 0 ? monitor.history[monitor.history.length - 1] : 0;
 
+                    const currentTicketsId = monitor.current_tickets_id || 0; // Certifique-se de que essa coluna exista e seja retornada pela consulta SQL
                     const cardHTML = `
                         <div class="card ${cardClass}">
                             <div class="card-title">${monitor.name}</div>
@@ -465,7 +466,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                                 <div class="sparkline">${sparklineSVG}</div>
                                 <div class="sparktext">Latência: ${lastLatency}ms</div>
                             </div>                                                      
-                            <div class="sla-text">SLA: ${slaDisplay || 'N/A'}</div>                            
+                            <div class="sla-text">SLA: ${slaDisplay || 'N/A'}</div>
+                            <div class="current_tickets_id"><a href="../../../front/ticket.form.php?id=" . ${currentTicketsId ? currentTicketsId : '#'} target="_blank">${currentTicketsId || ' '}</a></div>                                  
                         </div>
                     `;
                     grid.innerHTML += cardHTML;
