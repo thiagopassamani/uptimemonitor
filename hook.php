@@ -29,14 +29,15 @@ function plugin_uptimemonitor_install() {
             `is_noc` tinyint(1) NOT NULL DEFAULT '0',
             `itilcategories_id` int(11) NOT NULL DEFAULT 0,
             `auto_create_ticket` tinyint(1) NOT NULL DEFAULT '0',
+            `failed_attempts` int(11) NOT NULL DEFAULT 0,
             PRIMARY KEY (`id`) 
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
 
-        $query_insert = "INSERT INTO `glpi_plugin_uptimemonitor_monitors` (`id`, `name`, `url`, `type`, `check_interval`, `is_active`, `last_status`, `last_check`, `entities_id`, `is_recursive`, `itemtype`, `items_id`, `current_tickets_id`, `is_maintenance`, `maintenance_start`, `maintenance_end`, `groups_id_tech`, `criticality`, `is_noc`, `auto_create_ticket`, `itilcategories_id`) VALUES
-            (1, 'Google DNS1', '8.8.8.8', 'ping', 15, 1, 'UP', '2026-03-31 00:03:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'low', 1, 0, 0),
-            (2, 'Google DNS2', '8.8.4.4', 'ping', 1, 1, 'UP', '2026-03-31 00:09:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 0, 0),
-            (3, 'Cloudflare DNS1', '1.1.1.1', 'ping', 5, 1, 'UP', '2026-03-31 00:09:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 1, 3),
-            (4, 'Cloudflare DNS2', '1.1.2.2', 'ping', 5, 1, 'DOWN', '2026-03-31 00:09:54', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 0, 0);";
+        $query_insert = "INSERT INTO `glpi_plugin_uptimemonitor_monitors` (`id`, `name`, `url`, `type`, `check_interval`, `is_active`, `last_status`, `last_check`, `entities_id`, `is_recursive`, `itemtype`, `items_id`, `current_tickets_id`, `is_maintenance`, `maintenance_start`, `maintenance_end`, `groups_id_tech`, `criticality`, `is_noc`, `auto_create_ticket`, `itilcategories_id`, `failed_attempts`) VALUES
+            (1, 'Google DNS1', '8.8.8.8', 'ping', 15, 1, 'UP', '2026-03-31 00:03:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'low', 1, 0, 0, 0),
+            (2, 'Google DNS2', '8.8.4.4', 'ping', 1, 1, 'UP', '2026-03-31 00:09:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 0, 0, 0),
+            (3, 'Cloudflare DNS1', '1.1.1.1', 'ping', 5, 1, 'UP', '2026-03-31 00:09:53', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 1, 3, 0),
+            (4, 'Cloudflare DNS2', '1.1.2.2', 'ping', 5, 1, 'DOWN', '2026-03-31 00:09:54', 0, 0, NULL, 0, 0, 0, NULL, NULL, 0, 'test', 1, 0, 0, 0);";
         
         $DB->queryOrDie($query, $DB->error());
         $DB->queryOrDie($query_insert, $DB->error());
