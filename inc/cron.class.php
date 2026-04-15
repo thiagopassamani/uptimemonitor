@@ -382,6 +382,11 @@ class PluginUptimemonitorCron {
                 ['id' => $monitor['id']]
             );
         }
+
+        $host_name = $monitor['name'] ?: $monitor['url'];
+
+        PluginUptimemonitorConfig::sendTelegramNotification('service_down', $host_name);
+        PluginUptimemonitorConfig::sendSlackNotification('service_down', $host_name);
     }
 
     /**
@@ -416,6 +421,6 @@ class PluginUptimemonitorCron {
         $host_name = $monitor['name'] ?: $monitor['url'];
         
         PluginUptimemonitorConfig::sendTelegramNotification('service_up', $host_name);
-        PluginUptimemonitorConfig::sendSlackNotification($message, 'good');
+        PluginUptimemonitorConfig::sendSlackNotification('service_up', $host_name, 'good');
     }
 }
