@@ -396,7 +396,11 @@ class PluginUptimemonitorCron {
         global $DB;
         
         if ($monitor['current_tickets_id'] > 0) {
+
             $ticket_id = $monitor['current_tickets_id'];;
+            
+            $message = " ✅ Monitor de Uptime\n O serviço <b>{$monitor['name']}</b> está restabelecido! Finalizado o atendimento automaticamente pelo Monitor de Uptime.";
+            $message .= "\n\n Verificado em: " . date('d/m/Y H:i:s');
 
             // Adiciona Solução
             $sol = new ITILSolution();
