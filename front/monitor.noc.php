@@ -3,13 +3,34 @@
 include ("../../../inc/includes.php");
 
 // Verifica se o usuário está logado no GLPI (mesmo para a TV, é uma boa prática de segurança)
-Session::checkLoginUser();
+//Session::checkLoginUser();
+
+// Captura a entidade selecionada via URL (ex: monitor.noc.php?entities_id=5)
+$entities_id = isset($_GET['entities_id']) ? intval($_GET['entities_id']) : -1; 
+// getEntitiesRestrictRequest("AND", "glpi_plugin_uptimemonitor_monitors", "entities_id", $_SESSION['glpiactiveentities'], true) . " 
 
 // Retorna apenas os dados em JSON (Atualização em Background)
 if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
+    
     global $DB;
+    
     $monitors = [];
-    //$date_limit = date("Y-m-d H:i:s", strtotime("-24 hours"));
+
+    $where = [
+        'm.is_active' => 1, 
+        'm.is_noc'    => 1,
+    ];
+
+    // Filtro de Entidade
+    if ($entities_id >= 0) {
+        // Se uma entidade específica foi selecionada
+        $where['m.entities_id'] = $entities_id;
+    } else {
+        // Se não houver entidade no GET, usa a restrição de entidades da sessão do usuário
+        // Isso garante que ele veja "todas as entidades" que tem permissão.
+        $where += getEntitiesRestrictCriteria('glpi_plugin_uptimemonitor_monitors', '', '', true);
+    }
+
     $iterator = $DB->request([
         'SELECT' => [
             'm.id', 
@@ -18,6 +39,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             'm.url', 
             'm.last_status', 
             'm.is_maintenance',
+            'm.current_tickets_id',
             new \QueryExpression('COUNT(l.id) AS total_logs'),
             new \QueryExpression("SUM(CASE WHEN l.status = 'MAINT' THEN 1 ELSE 0 END) AS maint_count"),
             new \QueryExpression('SUM(CASE WHEN l.status = "UP" THEN 1 ELSE 0 END) AS up_count')
@@ -31,10 +53,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                 ]
             ]
         ],
-        'WHERE'     => [
-            'm.is_active' => 1, 
-            'm.is_noc'    => 1
-        ],
+        'WHERE'     => [ $where ],        
         'GROUPBY'   => [
             'm.id', 'm.name', 'm.type', 'm.url', 'm.last_status', 'm.is_maintenance'
         ],
@@ -50,7 +69,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
         echo json_encode([
             'error' => true,
             'message' => $DB->error(),
-            'sql' => $DB->last_query() // Útil para depurar o que o GLPI montou
+            'sql' => $DB->getLastQuery() // Útil para depurar o que o GLPI montou
         ]);
         exit;
     }
@@ -96,6 +115,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NOC - Uptime Monitor</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="../pics/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="../pics/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../pics/favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="../pics/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="../pics/android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="../pics/android-chrome-512x512.png">
+    <meta name="theme-color" content="#ffffff">
     <style>
         /* Estilo Base - Dark Mode */
         body {
@@ -125,6 +151,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             color: #aaa;
             letter-spacing: 2px;
         }
+        /* Estilo dos KPIs */
+        /*
+        .kpi-row { background: #1a1a1a; color: #eee; padding: 20px; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; gap: 20px; margin-bottom: 25px; justify-content: space-between; }
+        .kpi-card { background: #252525; flex: 1; padding: 15px; border-radius: 8px; border-left: 5px solid #3498db; }
+        .kpi-card span { margin: 0; font-size: 12px; color: #888; text-transform: uppercase; }
+        .kpi-card div { font-size: 28px; font-weight: bold; margin-top: 5px; }
+        */       
+
         /* Grid Responsiva dos Monitores */
         .grid-container {
             display: grid;
@@ -157,7 +191,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             border-top-color: #f39c12; 
             background-color: rgba(243, 156, 18, 0.15); /* Um pouco mais vibrante */
             opacity: 0.9; /* Menos transparente para facilitar a leitura na TV */
-        }
+        }    
         
         /* Tipografia dos Cards */
 
@@ -167,8 +201,19 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
         .card-title { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .card-icon { font-size: 2.5em; margin: 15px 0; }
         .status-text { font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
-        .sla-text { font-size: 0.75em; color: #888; }
         .card-url { font-size: 0.75em; color: #666; margin-top: 10px; word-break: break-all; }
+
+        .btn-ticket {
+            background-color: #f39c12;
+            color: #1a1a1a; 
+            border: 2px solid #f39c12;
+            padding: 8px 16px;
+            margin-top: 7px;            
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: 600;   
+            transition: 0.3s;
+        }
 
         /* Sparkline Container */
         .sparkline-container {
@@ -178,9 +223,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
             align-items: center;
             min-height: 45px;
         }
-        .latency-label { font-size: 0.7em; color: #888; margin-top: 4px; }
-        .sparkline {
 
+        .sparkline {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -258,7 +302,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                 <circle cx="65" cy="85" r="4" fill="#dc3545" />
             </svg></a>
         </span>
-        NOC Dashboard - Status dos Serviços
+        NOC Dashboard - Status dos Serviços <?php echo ($entities_id > 0) ? "(Entidade ID: $entities_id)" : "(Todas as Entidades)"; ?>
     </h1>
     <div style="display: flex; align-items: center; gap: 20px;">
         <button id="mute-btn" onclick="toggleMute()" title="Ativar/Desativar Som">
@@ -267,6 +311,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
         <div class="clock" id="clock">00:00:00</div>
     </div>
 </div>
+<!--
+<div class="kpi-row">
+    <div class="kpi-card"><span>Total</span><div>\${data.summary.total}</div></div>
+    <div class="kpi-card" style="border-color:#2ecc71"><span>Online</span><div style="color:#2ecc71">\${data.summary.up}</div></div>
+    <div class="kpi-card" style="border-color:#e74c3c"><span>Offline</span><div style="color:#e74c3c">\${data.summary.down}</div></div>
+    <div class="kpi-card"><span>SLA Médio</span><div>\${data.summary.avg_sla}%</div>
+</div>
+-->
 
 <div class="grid-container" id="monitor-grid">
     <div style="text-align:center; width: 100%; grid-column: 1 / -1; color: #888; margin-top: 50px;">
@@ -377,6 +429,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
 
     function fetchMonitors() {
         // Usamos uma URL dinâmica para garantir que ele chame o arquivo correto
+        /*if ($entities_id > 0) {
+            const url = window.location.pathname + '?ajax=1&entities_id=' + $entities_id;
+        } else {
+            const url = window.location.pathname + '?ajax=1';
+        }*/
+
         const url = window.location.pathname + '?ajax=1';
         
         console.log("Buscando dados em: " + url); // DEBUG
@@ -402,7 +460,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
 
                 grid.innerHTML = ''; 
 
-                data.forEach(monitor => {
+                //data.forEach(monitor => {
+                const cards = data.map(monitor => {
                     let cardClass = '';
                     let icon = 'fa-server';
                     let statusText = 'DESCONHECIDO';
@@ -419,6 +478,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                     if (type.includes('http')) icon = 'fa-globe';
                     if (type.includes('ping')) icon = 'fa-network-wired';
                     if (type.includes('port')) icon = 'fa-door-open';
+                    if (type.includes('ssl')) icon = 'fa-lock';
 
                     // Lógica de Status (Verifique se esses nomes de colunas existem na sua tabela)
                     // Prioridade 1: Flag de manutenção ou último status ser MAINT
@@ -440,8 +500,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                         hasCriticalAlert = true;
                         //currentDownMonitors.add(monitor.id); // Adiciona o monitor atual ao conjunto de DOWN
                         // SÓ FALA se o monitor não estava em DOWN na última verificação
-                        //if (soundEnabled && !lastDownMonitors.has(monitor.id)) {
-                        if(soundEnabled) {
+                        if (soundEnabled && !lastDownMonitors.has(monitor.id)) {
+                        //if(soundEnabled) {
                             const msg = new SpeechSynthesisUtterance("Atenção, " + monitor.name + " está fora do ar");
                             msg.lang = 'pt-BR';
                             window.speechSynthesis.speak(msg);
@@ -451,27 +511,28 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == 1) {
                     // Calcular o SLA apenas considerando os logs efetivos (sem manutenção)
                     const totalEfetivo = totalLogs - maintCount;
                     let slaDisplay = (totalEfetivo > 0) ? ((upCount / totalEfetivo) * 100).toFixed(2) + '%' : '100.00%';
-
                     const sparklineSVG = generateSparkline(monitor.history, cardClass);
                     const lastLatency = monitor.history.length > 0 ? monitor.history[monitor.history.length - 1] : 0;
+                    const currentTicketsId = monitor.current_tickets_id > 0 ? "<button class='btn btn-ticket'>" + '<i class="fa fa-ticket" aria-hidden="true"></i> Ticket #' + monitor.current_tickets_id.toString() + '</button>': '';
 
-                    const currentTicketsId = monitor.current_tickets_id || 0; // Certifique-se de que essa coluna exista e seja retornada pela consulta SQL
-                    const cardHTML = `
-                        <div class="card ${cardClass}">
+                    //const cardHTML = `                    
+                    return `<div class="card ${cardClass}">
                             <div class="card-title">${monitor.name}</div>
                             <div class="card-url">${monitor.url || ''}</div>
                             <div class="card-icon"><i class="fas ${icon}"></i></div>
                             <div class="status-text">${statusText}</div>
                             <div class="sparkline-container">
                                 <div class="sparkline">${sparklineSVG}</div>
-                                <div class="sparktext">Latência: ${lastLatency}ms</div>
-                            </div>                                                      
-                            <div class="sla-text">SLA: ${slaDisplay || 'N/A'}</div>
-                            <div class="current_tickets_id"><a href="../../../front/ticket.form.php?id=" . ${currentTicketsId ? currentTicketsId : '#'} target="_blank">${currentTicketsId || ' '}</a></div>                                  
-                        </div>
-                    `;
-                    grid.innerHTML += cardHTML;
+                                <div class="sparktext">
+                                    <span class="latency-label">SLA: ${slaDisplay}</span> - <span class="latency-label">Latência: ${lastLatency}ms</span>
+                                </div>
+                            </div>
+                            <div class="current_tickets_id">${currentTicketsId}</div>
+                        </div>`;
+                    //.innerHTML += cardHTML;
                 });
+                // Uma única escrita no DOM
+                grid.innerHTML = cards.join('');
 
                 lastDownMonitors = currentDownMonitors;
 

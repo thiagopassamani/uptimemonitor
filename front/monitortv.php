@@ -48,9 +48,6 @@ echo "    <div style='display: flex; justify-content: center; gap: 30px; margin-
             </div>
           </div>";
 
-// 4. Grid de Monitores
-//$res = $DB->request(['FROM' => 'glpi_plugin_uptimemonitor_monitors', 'ORDER' => 'name ASC']);
-
 $res = $DB->request([
     'SELECT' => [
         'm.*',
@@ -63,7 +60,6 @@ $res = $DB->request([
             'ON' => ['l' => 'plugin_uptimemonitor_monitors_id', 'm' => 'id']
         ]
     ],
-    //'WHERE'     => ['l.response_time_ms' => ['>', 1]],
     'GROUPBY'   => 'm.id',
     'ORDER'     => 'm.criticality DESC, m.name ASC'
 ]);
@@ -84,9 +80,9 @@ foreach ($res as $row) {
     $slaColor = ($sla >= 99) ? "green" : "red";
 
     // Link para o formulário de edição/detalhes
-    $link = "monitor.form.php?id=" . $row['id'];
+    //$link = "monitor.form.php?id=" . $row['id'];
 
-    echo "<a href='$link' style='text-decoration:none; color:inherit;'>";
+    //echo "<a href='$link' style='text-decoration:none; color:inherit;'>";
     echo "  <div class='card' style='border: 1px solid #ddd; border-top: 4px solid $color; background: $bg_light; transition: transform 0.2s;'>
                 <div class='card-body' style='padding: 15px;'>
                     <div style='display:flex; justify-content:space-between; align-items:center;'>
@@ -97,7 +93,6 @@ foreach ($res as $row) {
                     <div style='margin-top:10px; font-size:0.85rem; color:#666;'>
                         <i class='fas fa-info-circle'></i> ".htmlspecialchars($row['criticality'] ?? 'N/A')."<br>
                         <i class='fas fa-link'></i> ".htmlspecialchars($row['url'])."<br>
-                        <i class='fas fa-clock'></i> ".(Html::convDateTime($row['last_check']) ?: '--')."
                         <span>Tempo de atividade: <b style='color: $slaColor;'>$sla%</b></span><br>
                         <!--
                         <span>Tempo de atividade (SLA): <b style='color: $slaColor;'>$sla%</b> [ 24 horas: 100% | 30 dias: 100% | 1 ano: 100% ]</span><br>
@@ -106,14 +101,16 @@ foreach ($res as $row) {
     
     // Se houver um chamado aberto, mostra o ID
     if ($row['current_tickets_id'] > 0) {
-        echo "<div style='margin-top:10px; padding:5px; background:#fff; border:1px solid #e74c3c; border-radius:4px; font-size:0.7rem; color:#e74c3c; font-weight:bold;'>
-                <i class='fas fa-ticket-alt'></i> <a href='../../../front/ticket.form.php?id=".$row['current_tickets_id']."' target='_blank'>Ch. #".$row['current_tickets_id']."</a>
-              </div>";
+        echo "<button style='margin-top:10px; padding:5px; background:#fff; border:1px solid #e74c3c; border-radius:4px; font-size:0.7rem; color:#e74c3c; font-weight:bold;'>
+                <i class='fas fa-ticket-alt'></i> <a href='../../../front/ticket.form.php?id=".$row['current_tickets_id'] ."' target='_blank'>Ticket Aberto #".$row['current_tickets_id']."</a>
+              </button>";
+        echo "</div>";
+              
+    } else {
+        echo "</div>";
     }
-
-    echo "      </div>";
     echo "   </div>";
-    echo "</a>";
+    //echo "</a>";
 }
 
 echo "</div></div>";

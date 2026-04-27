@@ -295,6 +295,21 @@ Html::header(
 
                 <hr>
 
+                <div class="card-body">
+                    <h4 class="card-title mb-4">
+                        <i class="fas fa-info-circle"></i>
+                        <?php echo __('Engine', 'uptimemonitor'); ?>
+                    </h4>
+                    
+                    <label for="max_retries" class="form-label">
+                        <?php echo __('Máximo de Tentativas para DOWN antes de notificar', 'uptimemonitor'); ?>
+                    </label>
+                    <input type="number" class="form-control" id="max_retries"
+                           name="max_retries" min="1" value="<?php echo $all_configs['max_retries'] ?? 1; ?>">
+                </div>
+
+                <hr>
+
                 <!-- Submit Buttons -->
                 <div class="card-body">
                     <button type="submit" name="update" class="btn btn-primary">

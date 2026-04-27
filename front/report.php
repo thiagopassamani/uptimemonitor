@@ -54,9 +54,7 @@ echo "<span class='plugin-icon-container d-flex'>
 echo "<h3 class='card-title m-0'>" . __('Disponibilidade Mensal - ', 'uptimemonitor') . $month . '/' . $year . "</h3>";
 echo "</div>";
 
-
-
-echo "<div class='card-body mb-3'>";
+echo "<div class='card-body mb-3 d-print-none'>";
 echo "<form method='get' class='row g-3 align-items-end mb-0'>";
 echo "  <div class='col-auto'>";
 echo "    <label class='form-label mb-1 text-muted'>" . __('Mês') . "</label>";
@@ -72,29 +70,18 @@ echo "  </div>";
 echo "</form>";
 echo "</div>";
 echo "</div>";
-// ==========================================
-
-// Paginação Superior
-//echo "<div class='card-header d-flex search-header pe-0'>";
-//Html::printPager($start, $total_rows, $_SERVER['PHP_SELF'], $parameters);
-//echo "</div>";
-
-
-// ==========================================
-// CARD DA TABELA DE DADOS
-// ==========================================
 echo "<div class='card mb-3'>";
 echo "<div class='table-responsive'>";
-// A classe 'card-table' é o segredo do Tabler para a tabela preencher o card perfeitamente
 echo "<table class='table table-hover table-striped card-table align-middle mb-0'>";
 echo "<thead>";
-echo "  <tr class='text-center text-uppercase text-muted' style='font-size: 0.85rem;'>
-          <th class='text-start'>" . __("Serviço") . "</th>
-          <th>" . __("Total de Testes") . "</th>
-          <th>" . __("UP") . "</th>
-          <th>" . __("Manutenção") . "</th>
-          <th>" . __("Quedas Reais") . "</th>
-          <th>" . __("SLA Real (%)") . "</th>
+echo "<tr class='text-center text-uppercase text-muted' style='font-size: 0.85rem;'>
+        <th class='text-start'>" . __("Serviço") . "</th>
+        <th>" . __("Total de Testes") . "</th>
+        <th>" . __("UP") . "</th>
+        <th>" . __("Quedas Reais") . "</th>
+        <th>" . __("Manutenção") . "</th>
+        <th>" . __("SLA Real (%)") . "</th>
+        <th>" . __("Qtd. Tickets") . "</th>
         </tr>";
 echo "</thead>";
 echo "<tbody>";
@@ -135,9 +122,20 @@ foreach ($monitors as $monitor) {
     echo "  <td class='text-start fw-bold'>" . htmlspecialchars($monitor['name']) . "</td>";
     echo "  <td class='text-secondary'>$total</td>";
     echo "  <td class='text-success'>$up_count</td>";
-    echo "  <td class='$maint_text_class'>$maint</td>";
     echo "  <td class='text-danger'>$incidents</td>";
+    echo "  <td class='$maint_text_class'>$maint</td>";
     echo "  <td class='$color_sla_class fw-bold'>$sla%</td>";
+    // Contagem de tickets relacionados
+    $ticket_count = $DB->request([
+        'SELECT' => [new \QueryExpression('COUNT(*) AS total')],
+        'FROM'      => 'glpi_tickets',
+        'WHERE'     =>  ['name' => ['LIKE', '%' . htmlspecialchars($monitor['name']) . '%'], 
+            'is_deleted' => 0, 
+            new \QueryExpression("DATE_FORMAT(`date`, '%Y-%m') = '$year-$month'")
+        ],
+        'ORDER'     => 'id DESC'
+        ])->current()['total'];
+    echo "  <td class='text-secondary'>$ticket_count</td>";
     echo "</tr>";
 }
 
