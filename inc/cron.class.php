@@ -146,42 +146,14 @@ class PluginUptimemonitorCron {
                 $response_time = 0;
             }
 
-            // 6. DISPARA NOTIFICAÇÕES SE O STATUS MUDAR
-            /* 15/04/2025 - Thiago Passamani - Ajuste na lógica de notificações para evitar alertas falsos e garantir que sejam enviados apenas quando houver mudança real de status, considerando também a janela de manutenção. */
-            /*
-            if ($old_status !== $new_status) {
-                if ($inst->getFromDB($id)) {
-                    if ($new_status === 'DOWN') {
-                        // Abre ticket automaticamente
-                        self::handleServiceDown($monitor);
-
-                        NotificationEvent::raiseEvent('status_down', $inst);
-
-                        // Telegram Notification (NOVIDADE)
-                        $host_name = $monitor['name'] ?: $monitor['url'];
-
-                        PluginUptimemonitorConfig::sendTelegramNotification('service_down', $host_name);
-                        PluginUptimemonitorConfig::sendSlackNotification($message, 'danger');
-
-                    } elseif ($new_status === 'UP' && $old_status === 'DOWN') {
-                        // Fecha ticket automaticamente se existir
-                        self::handleServiceUp($monitor);
-                        NotificationEvent::raiseEvent('status_up', $inst);
-
-                        // Telegram Notification (NOVIDADE)
-                        $host_name = $monitor['name'] ?: $monitor['url'];
-                                        
-                        PluginUptimemonitorConfig::sendTelegramNotification('service_up', $host_name);
-                        PluginUptimemonitorConfig::sendSlackNotification($message, 'good');
-                    }
-                }
-            }*/
             // Define o número máximo de falhas antes de acionar o alerta. 
             // No futuro, pode buscar este valor de PluginUptimemonitorConfig
-            $max_retries = 3; 
-                
+            //$max_retries = PluginUptimemonitorConfig::getConfigValue('max_retries') ?? 1; // Thiago Passamani - 2024-06-30: Ajuste para garantir que seja um inteiro e tenha um valor padrão de 1
+            $max_retries = (int)(PluginUptimemonitorConfig::getConfigValue('max_retries') ?: 1);
+
             // Recupera as tentativas atuais ou assume 0
             $current_attempts = isset($monitor['failed_attempts']) ? (int)$monitor['failed_attempts'] : 0;
+            
             if ($new_status === 'DOWN') {
                 $current_attempts++;
                 // Grava a tentativa falhada na base de dados
@@ -194,20 +166,16 @@ class PluginUptimemonitorCron {
                 // E se não estava já marcado como DOWN anteriormente (evita flood)
                 if ($current_attempts >= $max_retries && $old_status !== 'DOWN') {
                     
-                    // Abre ticket automaticamente
-                    self::handleServiceDown($monitor);
-                    NotificationEvent::raiseEvent('status_down', $inst);
-                    // Telegram & Slack Notification
-                    $host_name = $monitor['name'] ?: $monitor['url'];
-                    PluginUptimemonitorConfig::sendTelegramNotification('service_down', $host_name);
-                    PluginUptimemonitorConfig::sendSlackNotification('service_down', $host_name, 'danger');
-                    
+                    // Abre ticket automaticamente e marca o monitor como DOWN! Realiza as notificações apenas na primeira vez que atingir o limite, evitando alertas falsos em casos de instabilidade momentânea.
+                    self::handleServiceDown($monitor, $inst);
+                                       
                     // Força a atualização do status global para DOWN
                     $DB->update(
                         'glpi_plugin_uptimemonitor_monitors',
-                        ['status' => 'DOWN'],
+                        ['last_status' => 'DOWN'],
                         ['id' => $monitor['id']]
                     );
+
                 }
             } elseif ($new_status === 'UP') {
                 // Se o serviço respondeu com sucesso, limpamos imediatamente o contador de falhas
@@ -219,20 +187,16 @@ class PluginUptimemonitorCron {
                     );
                 }
                 // Se estava DOWN e agora está UP, tratamos a recuperação
+                //if ($new_status === 'UP' && $old_status === 'DOWN') {
                 if ($old_status === 'DOWN') {
-                    // Fecha ticket automaticamente se existir
-                    self::handleServiceUp($monitor);
-                    NotificationEvent::raiseEvent('status_up', $inst);
-                    // Telegram & Slack Notification
-                    $host_name = $monitor['name'] ?: $monitor['url'];
-
-                    PluginUptimemonitorConfig::sendTelegramNotification('service_up', $host_name);
-                    PluginUptimemonitorConfig::sendSlackNotification('service_up', $host_name, 'good');
+                    // Fecha ticket automaticamente se existir e se estava marcado como DOWN (evita fechar ticket se o monitor estava em UP, mas falhou no teste atual). 
+                    // Realiza as notificações apenas na transição de DOWN para UP, garantindo que os alertas sejam precisos e relevantes.
+                    self::handleServiceUp($monitor, $inst);
 
                     // Força a atualização do status global para UP
                     $DB->update(
                         'glpi_plugin_uptimemonitor_monitors',
-                        ['status' => 'UP'],
+                        ['last_status' => 'UP'],
                         ['id' => $monitor['id']]
                     );
                 }
@@ -318,15 +282,33 @@ class PluginUptimemonitorCron {
                 }
 
                 return 'DOWN';
-        }
+            case 'ssl':
+                // Remove o protocolo se o usuário digitou https://
+                $host = parse_url($url, PHP_URL_HOST) ?: $url;
+    
+                $get = stream_context_create(["ssl" => ["capture_peer_cert" => true]]);
+                $read = @stream_socket_client("ssl://".$host.":443", $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $get);
+    
+                if (!$read) return 'DOWN'; // Falha ao conectar
 
+                $cont = stream_context_get_params($read);
+                $cert = openssl_x509_parse($cont["options"]["ssl"]["peer_certificate"]);
+    
+                $validTo = $cert['validTo_time_t'];
+                $daysLeft = round(($validTo - time()) / 86400);
+
+                // Se faltar menos de 15 dias, marcamos como DOWN (ou alerta)
+                return ($daysLeft > 15) ? 'UP' : 'DOWN';
+            default:
+                return 'DOWN';
+        }
         return 'DOWN';
     }
 
     /**
      * Trata queda de serviço - abre ticket automaticamente
      */
-    private static function handleServiceDown($monitor) {
+    private static function handleServiceDown($monitor, $inst = null) {
         global $DB;
 
         // Verifica se o monitor tem configuração explícita (0 ou 1), se não tiver (null/não definido), usa a config global
@@ -347,8 +329,8 @@ class PluginUptimemonitorCron {
         $itilcategories_id = (!empty($monitor['itilcategories_id']) && $monitor['itilcategories_id'] > 0) ? $monitor['itilcategories_id'] : (PluginUptimemonitorConfig::getAllConfigs()['ticket_category'] ?? 0);
         $ticket = new Ticket();
         $tickets_id = $ticket->add([
-            'name'              => '🚨 ALERTA DE QUEDA: ' . $monitor['name'],
-            'content'           => "O serviço <b>{$monitor['name']}</b> ({$monitor['url']}) está fora do ar.",
+            'name'              => "🚨 ALERTA DE QUEDA: " . $monitor['name'],
+            'content'           => "O serviço <b>" . $monitor['name'] . "</b> ({$monitor['url']}) está fora do ar.",
             'itilcategories_id' => $itilcategories_id,
             'status'            => Ticket::INCOMING,
             'urgency'           => 4,
@@ -383,6 +365,8 @@ class PluginUptimemonitorCron {
             );
         }
 
+        NotificationEvent::raiseEvent('status_down', $inst);
+
         $host_name = $monitor['name'] ?: $monitor['url'];
 
         PluginUptimemonitorConfig::sendTelegramNotification('service_down', $host_name);
@@ -392,27 +376,58 @@ class PluginUptimemonitorCron {
     /**
      * Trata recuperação de serviço - fecha ticket automaticamente
      */
-    private static function handleServiceUp($monitor) {
+    private static function handleServiceUp($monitor, $inst = null) {
         global $DB;
         
-        if ($monitor['current_tickets_id'] > 0) {
+        if ($monitor['current_tickets_id'] > 0) {         
+                        
+            $iterator = $DB->request([
+                'FROM' => 'glpi_plugin_uptimemonitor_logs',
+                'WHERE' => [
+                    'plugin_uptimemonitor_monitors_id' => $monitor['id'],
+                    'status' => 'DOWN'
+                ],
+                'ORDER'  => 'date_creation DESC',
+                'LIMIT' => 1
+            ]);
 
-            $ticket_id = $monitor['current_tickets_id'];;
-            
-            $message = " ✅ Monitor de Uptime\n O serviço <b>{$monitor['name']}</b> está restabelecido! Finalizado o atendimento automaticamente pelo Monitor de Uptime.";
-            $message .= "\n\n Verificado em: " . date('d/m/Y H:i:s');
+            $date_now = date('Y-m-d H:i:s');
+                        
+            if (count($iterator) > 0) {
+                $time_offline_data = $iterator->current();               
+
+                $start_time = strtotime($time_offline_data['date_creation']);
+                $end_time   = time();
+                $diff_seconds = $end_time - $start_time;
+                
+                $message_task = __('Tempo offline calculado automaticamente pelo Monitor de Uptime.', 'uptimemonitor');
+
+                $task = new TicketTask();
+                $task->add([
+                    'content' => $message_task,                
+                    'tickets_id' => $monitor['current_tickets_id'],
+                    'state' => 0, // Tarefa Informativa, sem ação necessária
+                    'users_id' => 1,
+                    'actiontime' => $diff_seconds,
+                ]);
+            }
+
+            $message = "✅ Monitor de Uptime <br>";
+            $message .= "O serviço <b>{$monitor['name']}</b> está restabelecido!<br>"; 
+            $message .= "Finalizado o atendimento automaticamente pelo Monitor de Uptime.<br>";
+            $message .= "Verificado em: " . $date_now;
 
             // Adiciona Solução
             $sol = new ITILSolution();
             $sol->add([
                 'itemtype' => 'Ticket',
-                'items_id' => $ticket_id,
+                'items_id' => $monitor['current_tickets_id'],
                 'content'  => $message,
             ]);
 
             // Resolve o chamado
             $t = new Ticket();
-            $t->update(['id' => $ticket_id, 'status' => Ticket::SOLVED]);
+            $t->update(['id' => $monitor['current_tickets_id'], 'status' => Ticket::SOLVED]);
 
             // Limpa ID no monitor
             $DB->update(
@@ -421,6 +436,8 @@ class PluginUptimemonitorCron {
                 ['id' => $monitor['id']]
             );
         }
+
+        NotificationEvent::raiseEvent('status_up', $inst);
 
         $host_name = $monitor['name'] ?: $monitor['url'];
         

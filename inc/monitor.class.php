@@ -91,7 +91,8 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
                 $tipos = [
                     'http' => 'Página Web',
                     'ping' => 'Ping (ICMP)',
-                    'port' => 'Porta TCP'
+                    'port' => 'Porta TCP',
+                    'ssl'  => 'Validade do Certificado SSL'
                 ];
                 return $tipos[$options['value']] ?? $options['value'];
         }
@@ -144,7 +145,8 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         $tipos_verificacao = [
             'http' => 'Página Web (HTTP / HTTPS)',
             'ping' => 'Ping (ICMP)',
-            'port' => 'Porta TCP'
+            'port' => 'Porta TCP',
+            'ssl'  => 'Validade do Certificado SSL'
         ];
         Dropdown::showFromArray('type', $tipos_verificacao, [
             'value'   => $this->fields['type'] ?? 'http',
@@ -196,6 +198,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         ]);
         echo "</td>";
 
+        // Grupo Técnico
         echo "<td>" . __('Grupo Técnico Responsável:', 'uptimemonitor') . "</td>";
         echo "<td>";
         Group::dropdown([
@@ -206,6 +209,7 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "</td>";
         echo "</tr>";
         
+        // NOC
         echo "<tr>";
         echo "<th colspan='4'>" . __('NOC', 'uptimemonitor'). "</th>";
         echo "</tr>";
@@ -233,13 +237,12 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         echo "<th colspan='4'>" . __('Agendamento de Manutenção (Silenciar Alertas)', 'uptimemonitor'). "</th>";
         echo "</tr>";
 
-
+        // Manutenção
         echo "<tr class='tab_bg_1'>";
         echo "<td>" . __('Ativar Janela de Manutenção:', 'uptimemonitor') . "</td>";
         echo "<td>";
         Dropdown::showYesNo("is_maintenance", $this->fields["is_maintenance"] ?? 0);
         echo "</td>";
-
         echo "<td>" . __('Período da Manutenção:', 'uptimemonitor') . "</td>";
         echo "<td>";
         echo "Início: ";
@@ -325,30 +328,29 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         ];
     }
 
-   function getTabNameForItem(CommonGLPI $item, $withtemplate = 0) {
-    if ($item->getType() == __CLASS__) {
-        return [
-            'stats' => __('Estatísticas', 'uptimemonitor'),
-            'tickets' => __('Tickets Relacionados', 'uptimemonitor')
-        ];
-    } else {
-        return [
-            'stats' => __('Estatísticas', 'uptimemonitor')
-        ];
-    }
-    return '';
+    function getTabNameForItem(CommonGLPI $item, $withtemplate = 0) {
+        if ($item->getType() == __CLASS__) {
+            return [
+                'stats' => __('Estatísticas', 'uptimemonitor'),
+                'tickets' => __('Tickets Relacionados', 'uptimemonitor')
+            ];
+        } else {
+            return [
+                'stats' => __('Estatísticas', 'uptimemonitor')
+            ];
+        }
+        return '';
     }
 
     static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0) {
-      if ($tabnum == 'stats') {
-           self::showStats($item);
-      } elseif ($tabnum == 'tickets') {
+        if ($tabnum == 'stats') {
+            self::showStats($item);
+        } elseif ($tabnum == 'tickets') {
            self::showTickets($item);
-      } else {
+        } else {
            self::showStats($item);
-      }
-      return true;
-
+        }
+        return true;
     }
 
     static function showStats($item) {
@@ -551,8 +553,8 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
         foreach ($tickets_array as $ticket) {         
             echo "<tr class='tab_bg_1'>";
             echo "<td><a href='" . Toolbox::getItemTypeFormURL('Ticket') . "?id=" . $ticket['id'] . "'>" . $ticket['id'] . "</a></td>";
-            echo "<td>" . $ticket['name'] . "</td>";
-            echo "<td>" . $ticket['status'] . "</td>"; // Adicionar nome do status
+            echo "<td>" . htmlspecialchars($ticket['name']) . "</td>";
+            echo "<td>" . htmlspecialchars($ticket['status']) . "</td>"; // Adicionar nome do status
             echo "<td>" . Html::convDateTime($ticket['date_creation']) . "</td>";
             echo "<td>" . Html::convDateTime($ticket['solvedate']) . "</td>";
             echo "</tr>";
@@ -618,18 +620,16 @@ class PluginUptimemonitorMonitor extends CommonDBTM {
      * Conteúdo do menu personalizado para as páginas do plugin (Adicionar, Dashboard, TV, NOC, Report)
      */
     static function getMenuContentPluginCustom() {
-        echo "<div class='btn-group flex-wrap mb-3'>";
+        echo "<div class='btn-group flex-wrap mb-3 d-print-none' role='group' aria-label='Menu de Ações'>";
         echo "<span class='btn bg-blue-lt pe-none' aria-disabled='true'>Ações</span>";
         echo "  <a href='monitor.form.php' class='btn btn-outline-secondary'>";
         echo "      <i class='fas fa-plus fa-lg me-2'></i> " . __("Adicionar", "uptimemonitor");
         echo "  </a>";
-        echo "  <a href='dashboard.php' class='btn btn-outline-secondary'>";
-        echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("Dashboard", "uptimemonitor");
-        echo "  </a>";
-        echo "  <a href='monitortv.php' class='btn btn-outline-secondary'>";
-        echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("TV", "uptimemonitor");
-        echo "  </a>";
-        echo "  <a href='monitor.noc.php' class='btn btn-outline-secondary'>";
+        // Em desenvolvimento - Dashboard e TV podem ser implementados futuramente
+        //echo "  <a href='dashboard.php' class='btn btn-outline-secondary'>";
+        //echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("Dashboard", "uptimemonitor");
+        //echo "  </a>";
+        echo "  <a href='monitor.noc.php' class='btn btn-outline-secondary' target='_blank'>";
         echo "      <i class='fas fa-gauge fa-lg me-2'></i> " . __("NOC", "uptimemonitor");
         echo "  </a>";
         echo "  <a href='report.php' class='btn btn-outline-secondary'>";

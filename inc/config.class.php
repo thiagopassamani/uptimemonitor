@@ -12,14 +12,14 @@ if (!defined('GLPI_ROOT')) {
 
 class PluginUptimemonitorConfig extends CommonDBTM {
 
+    static public $cache; // Thiago Passamani - 2024-06-30: Cache para evitar consultas repetidas ao banco
+
     public static $rightname = 'uptimemonitor';
     public $dohistory = false;
 
     public static function getTypeName($nb = 0) {
         return _n('Configuration', 'Configurations', $nb, 'uptimemonitor');
     }
-
-    //private static $cache = [];
 
     /**
      * Get a configuration value by name
@@ -54,10 +54,9 @@ class PluginUptimemonitorConfig extends CommonDBTM {
             error_log('Error getting config value: ' . $e->getMessage());
         }
 
-        return $default;
-// Novo
-        self::$cache[$name] = $value;
-        return $value;
+        // Thiago Passamani - 2024-06-30: Se não encontrar o valor, cacheia o default para evitar consultas repetidas ao banco
+        self::$cache[$name] = $default;
+        return self::$cache[$name];
     }
 
     /**
@@ -238,7 +237,11 @@ class PluginUptimemonitorConfig extends CommonDBTM {
     }
 
     /**
-     * Generate notification message based on event type
+     * @function notificationMessage
+     * @description Formata a mensagem de notificação para Telegram e Slack com base no tipo de evento (queda, recuperação, início/fim de manutenção) e no nome do host monitorado.
+     * @param string $message Message type (service_down, service_up, service_maintenance_start, service_maintenance_end)
+     * @param string $host_name Name of the monitored host
+     * @return string Formatted message ready to be sent to Telegram or Slack
      */
     public static function notificationMessage($message, $host_name) {
         
@@ -246,24 +249,22 @@ class PluginUptimemonitorConfig extends CommonDBTM {
         
         switch($message) {
             case 'service_down':
-                $formatted_message = "🚨 *Monitor de Uptime*\n";
-                $formatted_message .= "ALERTA DE QUEDA";
-                $formatted_message .= "O serviço *" . $host_name . "* está OFFLINE.\n";
+                $formatted_message = "🚨 <b>Monitor de Uptime: ALERTA DE QUEDA</b>\n";
+                $formatted_message .= "O serviço " . $host_name . " está OFFLINE.\n";
                 $formatted_message .= "Verificado em: " . date('d/m/Y H:i:s');
                 break;
             case 'service_up':
-                $formatted_message = "✅ *Monitor de Uptime*\n";
-                $formatted_message .= "O serviço *" . $host_name . "* está ONLINE.\n";
-                $formatted_message .= "Serviço restabelecido automaticamente pelo Monitor de Uptime.\n";
+                $formatted_message = "✅ <b>Monitor de Uptime: ALERTA DE RECUPERAÇÃO</b>\n";
+                $formatted_message .= "O serviço " . $host_name . " está ONLINE.\n";
                 $formatted_message .= "Verificado em: " . date('d/m/Y H:i:s');
                 break;
             case 'service_maintenance_start':
-                $formatted_message = "🔧 *Aviso de Manutenção*\n";
-                $formatted_message .= "O serviço *" . $host_name . "* está em manutenção programada.\n";
+                $formatted_message = "🔧 <b>Monitor de Uptime: MANUTENÇÃO INICIADA</b>\n";
+                $formatted_message .= "O serviço " . $host_name . " está em manutenção programada.\n";
                 break;
             case 'service_maintenance_end':
-                $formatted_message = "🔧 *Aviso de Manutenção*\n";
-                $formatted_message .= "O período de manutenção de *" . $host_name . "* foi concluído.\nO monitoramento foi reativado.";
+                $formatted_message = "🔧 <b>Monitor de Uptime: MANUTENÇÃO CONCLUÍDA</b>\n";
+                $formatted_message .= "O período de manutenção de " . $host_name . " foi concluído.\nO monitoramento foi reativado.";
                 break;
             default:
                 $formatted_message = $message;
@@ -275,9 +276,10 @@ class PluginUptimemonitorConfig extends CommonDBTM {
     }
 
     /**
-     * Send notification via Telegram
-     * 
+     * @function sendTelegramNotification
+     * @description Envia uma notificação formatada para o Telegram usando a API do Bot. Verifica se as notificações estão habilitadas e se as credenciais estão configuradas antes de enviar a mensagem.
      * @param string $message Message to send
+     * @param string $host_name Name of the monitored host
      * @return bool Success status
      */
     public static function sendTelegramNotification($message, $host_name) {
@@ -317,9 +319,10 @@ class PluginUptimemonitorConfig extends CommonDBTM {
     }
 
     /**
-     * Send notification via Slack
-     * 
+     * @function sendSlackNotification
+     * @description Envia uma notificação formatada para o Slack usando Webhook. Verifica se as notificações estão habilitadas e se o Webhook URL está configurado antes de enviar a mensagem. Permite definir a cor da mensagem com base no tipo de evento (queda, recuperação, manutenção).    * 
      * @param string $message Message to send
+     * @param string $host_name Name of the monitored host
      * @param string $color Message color (good, warning, danger)
      * @return bool Success status
      */
