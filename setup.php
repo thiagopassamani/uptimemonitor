@@ -35,12 +35,12 @@ function plugin_init_uptimemonitor() {
    }
 
    //Notificações
-   $PLUGIN_HOOKS['item_get_events']['uptimemonitor'] = [
-      'PluginUptimemonitorMonitor' => 'getEvents'
-   ];
-   $PLUGIN_HOOKS['item_get_targets']['uptimemonitor'] = [
-      'PluginUptimemonitorMonitor' => 'getTargets'
-   ];
+   $PLUGIN_HOOKS['item_get_events']['uptimemonitor'] = [ 'PluginUptimemonitorMonitor' => 'getEvents' ];
+   $PLUGIN_HOOKS['item_get_targets']['uptimemonitor'] = [ 'PluginUptimemonitorMonitor' => 'getTargets' ];
+   // Configurações
+   if (Session::haveRight('config', UPDATE)) {
+      $PLUGIN_HOOKS['config_page']['uptimemonitor'] = 'front/config.form.php';
+   }
 
    // Ações Automáticas (Cron)
    // Aponta para a classe dedicada ao cron do plugin (agora em inc/cron.class.php)
