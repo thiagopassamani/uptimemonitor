@@ -130,11 +130,24 @@ function plugin_uptimemonitor_install() {
 
 function plugin_uptimemonitor_uninstall() {
     global $DB;
+ 
+    // Remove the tables if the user decides to uninstall and clean up data
+    $tables = [
+      'monitors',
+      'logs',
+      'configs'
+    ];
 
-    // Remove as tabelas se o utilizador decidir desinstalar e limpar os dados
-    $DB->query("DROP TABLE IF EXISTS `glpi_plugin_uptimemonitor_monitors`");
-    $DB->query("DROP TABLE IF EXISTS `glpi_plugin_uptimemonitor_logs`");
-    $DB->query("DROP TABLE IF EXISTS `glpi_plugin_uptimemonitor_configs`");
+    foreach ($tables as $table) {
+        $tablename = 'glpi_plugin_uptimemonitor_' . $table;
+        //Create table only if it does not exists yet!
+        if ($DB->tableExists($tablename)) {
+            $DB->queryOrDie(
+                "DROP TABLE `$tablename`",
+                $DB->error()
+            );
+        }
+    }
 
     return true;
 }

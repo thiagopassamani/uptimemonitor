@@ -12,22 +12,17 @@ function plugin_init_uptimemonitor() {
    $PLUGIN_HOOKS['csrf_compliant']['uptimemonitor'] = true; // Segurança CSRF
 
    // 2. Registro de Classes (Sem repetições)
-   Plugin::registerClass('PluginUptimemonitorMonitor', [
-      'addtabon' => ['PluginUptimemonitorMonitor']
-   ]);
+   Plugin::registerClass('PluginUptimemonitorMonitor', [ 'addtabon' => ['PluginUptimemonitorMonitor']]);
    Plugin::registerClass('PluginUptimemonitorCron');
    Plugin::registerClass('PluginUptimemonitorLog');
    Plugin::registerClass('PluginUptimemonitorConfig');
-   Plugin::registerClass('PluginUptimemonitorProfile', [
-       'addtabon' => ['Profile']
-   ]);
+   Plugin::registerClass('PluginUptimemonitorProfile', ['addtabon' => ['Profile']]);
 
    // Gestão de Direitos
    //$PLUGIN_HOOKS['rights']['uptimemonitor'] = 'Uptime Monitor';
    $PLUGIN_HOOKS['rights']['uptimemonitor'] = 'uptimemonitor';
 
-   // 4. Menus (Aparecerá em Plugins > Uptime Monitor)
-   // Alterado para 'ticket' para que o pessoal do NOC consiga ver o menu e breadcrumb
+   // Plugins > Uptime Monitor
    if (Session::haveRight('uptimemonitor', READ)) {
       $PLUGIN_HOOKS['menu_toadd']['uptimemonitor'] = [
          'plugins' => 'PluginUptimemonitorMonitor'
@@ -37,6 +32,7 @@ function plugin_init_uptimemonitor() {
    //Notificações
    $PLUGIN_HOOKS['item_get_events']['uptimemonitor'] = [ 'PluginUptimemonitorMonitor' => 'getEvents' ];
    $PLUGIN_HOOKS['item_get_targets']['uptimemonitor'] = [ 'PluginUptimemonitorMonitor' => 'getTargets' ];
+   
    // Configurações
    if (Session::haveRight('config', UPDATE)) {
       $PLUGIN_HOOKS['config_page']['uptimemonitor'] = 'front/config.form.php';
