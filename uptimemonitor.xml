@@ -3,7 +3,7 @@
     <name>Uptime Monitor</name>
     <key>uptimemonitor</key>
     <state>stable</state>
-    <logo>https://raw.githubusercontent.com/thiagopassamani/uptimemonitor/master/uptimemonitor.png</logo>
+    <logo>https://github.com/thiagopassamani/uptimemonitor/blob/main/uptimemonitor.png</logo>
     <description>
         <short>
             <pt><![CDATA[Este plugin permite adicionar 4 novas opções a um ticket no GLPI]]></pt>
