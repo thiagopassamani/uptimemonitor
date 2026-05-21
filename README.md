@@ -68,7 +68,7 @@ OBS: Auxilio do Google Gemini e Copilot.
 
 * `setup.php` / `hook.php`: Registo do plugin, verificação de requisitos (cURL, versão) e migrações de base de dados (Tabelas, Entidades, Manutenção).
 * `inc/monitor.class.php`: Controlador da interface gráfica e formulários nativos GLPI (com suporte a Dropdowns dinâmicos).
-* `inc/poller.class.php`: O "Cérebro". Executa o loop de testes de conectividade, calcula latências, gere as janelas de manutenção e o ciclo de vida ITIL dos Tickets.
+* `inc/cron.class.php`: O "Cérebro". Executa o loop de testes de conectividade, calcula latências, gere as janelas de manutenção e o ciclo de vida ITIL dos Tickets.
 * `front/dashboard.php`: Painel visual isolado por entidade.
 * `front/monitor.noc.php`: Painel de visualização na TV. Sugestão para uso na equipe NOC.
 * `front/monitor.form.php`: Roteador protegido de validação de formulários.
@@ -80,7 +80,7 @@ OBS: Auxilio do Google Gemini e Copilot.
 - Verificações de tipo suportadas: `http`, `https`, `ping` (exec ping shell), `port` (fsockopen).
 - Estados de monitor: `UP`, `DOWN`, `MAINT` (manutenção) e `PENDING` no form.
 - Criticidade controla frequência do poller:
-  - `test`: 30s
+  - `test`: 30s // 3 Será ajustado para críticos.
   - `high`: 60s
   - `medium`: 300s
   - `low`: 900s
@@ -98,8 +98,8 @@ OBS: Auxilio do Google Gemini e Copilot.
 - [x] Dashboard e relatórios por entidade
 - [x] Abertura/fechamento de tickets ITIL com regras de deduplicação
 - [x] Janelas de manutenção (Scheduled Downtime)
-- [ ] Integração com notificações externas (WhatsApp, Telegram, Slack)
-- [ ] Relatórios históricos de SLA e métricas de disponibilidade
+- [x] Integração com notificações externas (Telegram e Slack)
+- [x] Relatórios históricos de SLA e métricas de disponibilidade
 - [ ] Redundância de múltiplos data centers
 - [ ] Modo de failover e alertas desenhados por perfil
 
